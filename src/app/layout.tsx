@@ -12,12 +12,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ru">
-       <body className="relative min-h-screen bg-gradient-to-br from-blue-50 via-sky-100 to-cyan-100 text-gray-800 overflow-hidden bg-fixed">
+      <body className="relative min-h-screen bg-gradient-to-br from-blue-50 via-sky-100 to-cyan-100 text-gray-800 overflow-hidden bg-fixed">
         {/* Размытые цветные пятна */}
-        <div className="absolute top-0 left-1/3 w-[30rem] h-[30rem] bg-sky-200 rounded-full blur-3xl opacity-40"></div>
-        <div className="absolute bottom-10 right-1/4 w-[25rem] h-[25rem] bg-cyan-300 rounded-full blur-3xl opacity-30"></div>
-        <div className="absolute top-1/2 left-0 w-[20rem] h-[20rem] bg-indigo-200 rounded-full blur-3xl opacity-20"></div>
-
+        
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-10 left-1/4 w-[32rem] h-[32rem] rounded-full bg-cyan-300/25 blur-3xl"></div>
+          <div className="absolute bottom-0 right-1/5 w-[28rem] h-[28rem] rounded-full bg-indigo-400/20 blur-3xl"></div>
+          <div className="absolute top-1/3 right-0 w-[22rem] h-[22rem] rounded-full bg-sky-300/20 blur-3xl"></div>
+        </div>
         {/* Контент */}
         {children}
       </body>
