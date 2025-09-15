@@ -12,7 +12,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ru">
-      <body className="relative min-h-screen bg-gradient-to-br from-blue-50 via-sky-100 to-cyan-100 text-gray-800 overflow-hidden bg-fixed">
+      <body className="relative min-h-screen bg-gradient-to-br from-blue-50 via-sky-100 to-cyan-100 text-gray-800 bg-fixed">
         {/* Размытые цветные пятна */}
         
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
