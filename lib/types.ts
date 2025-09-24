@@ -47,3 +47,12 @@ export type Field = {
   max?: number;
 };
 
+export type RowWithMetrics = Row & {
+  rev: number;
+  fee: number;
+  direct: number;
+  profit: number;
+  marginPct: number;
+};
+
+

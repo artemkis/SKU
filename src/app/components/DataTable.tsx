@@ -1,7 +1,7 @@
 'use client';
 
 import Tooltip from './Tooltip';
-import { fmt, fmtRub } from '@/lib/helpers';
+import { fmt, fmtRub } from '../../../lib/helpers';
 
 /* ================== типы пропсов ================== */
 

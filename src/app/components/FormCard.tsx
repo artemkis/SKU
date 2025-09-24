@@ -1,7 +1,7 @@
 'use client';
 
-import { Field } from '@/lib/types';
-import { fmt, fmtRub } from '@/lib/helpers';
+import { Field } from '../../../lib/types';
+import { fmt, fmtRub } from '../../../lib/helpers';
 
 export default function FormCard({
   fields,
