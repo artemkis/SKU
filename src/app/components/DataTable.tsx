@@ -1,62 +1,62 @@
-'use client';
+'use client'
 
-import Tooltip from './Tooltip';
-import { fmt, fmtRub } from '../../../lib/helpers';
+import Tooltip from './Tooltip'
+import { fmt, fmtRub } from '../../../lib/helpers'
 
 /* ================== типы пропсов ================== */
 
 type HeaderCol = {
-  key: string;
-  label: string;
-  width?: string;
-  tooltip?: { text: string; formula?: string };
-};
+  key: string
+  label: string
+  width?: string
+  tooltip?: { text: string; formula?: string | string[]}
+}
 
 type RowWithMetrics = {
-  id: string;
-  sku: string;
-  price: number;
-  cost: number;
-  feePct: number;
-  logistics: number;
-  rev: number;
-  fee: number;
-  direct: number;
-  profit: number;
-  marginPct: number;
-};
+  id: string
+  sku: string
+  price: number
+  cost: number
+  feePct: number
+  logistics: number
+  rev: number
+  fee: number
+  direct: number
+  profit: number
+  marginPct: number
+}
 
 type ComputedBlock = {
-  rows: RowWithMetrics[];
-  totals: { rev: number; fee: number; direct: number; profit: number };
-  totalMarginPct: number;
-};
+  rows: RowWithMetrics[]
+  totals: { rev: number; fee: number; direct: number; profit: number }
+  totalMarginPct: number
+}
 
 type DataTableProps = {
-  headerColumns: HeaderCol[];
-  SKU_COL_W: string;
-  computed: ComputedBlock;
+  headerColumns: HeaderCol[]
+  SKU_COL_W: string
+  computed: ComputedBlock
 
-  editingId: string | null;
-  draftSku: string;
-  draftPrice: string;
-  draftCost: string;
-  draftFeePct: string;
-  draftLogistics: string;
+  editingId: string | null
+  draftSku: string
+  draftPrice: string
+  draftCost: string
+  draftFeePct: string
+  draftLogistics: string
 
-  setDraftSku: (v: string) => void;
-  setDraftPrice: (v: string) => void;
-  setDraftCost: (v: string) => void;
-  setDraftFeePct: (v: string) => void;
-  setDraftLogistics: (v: string) => void;
+  setDraftSku: (v: string) => void
+  setDraftPrice: (v: string) => void
+  setDraftCost: (v: string) => void
+  setDraftFeePct: (v: string) => void
+  setDraftLogistics: (v: string) => void
 
-  handleStartEdit: (r: RowWithMetrics) => void;
-  handleSaveEdit: () => void;
-  handleCancelEdit: () => void;
-  handleRemove: (id: string) => void;
+  handleStartEdit: (r: RowWithMetrics) => void
+  handleSaveEdit: () => void
+  handleCancelEdit: () => void
+  handleRemove: (id: string) => void
 
-  totalMarginClass: string;
-};
+  totalMarginClass: string
+}
 
 /* ================== компонент ================== */
 
@@ -81,6 +81,28 @@ export default function DataTable({
   handleRemove,
   totalMarginClass,
 }: DataTableProps) {
+    const TipContent = ({ col }: { col: HeaderCol }) => {
+  const f = col.tooltip?.formula
+  const lines = f ? (Array.isArray(f) ? f : String(f).split(/\r?\n/)) : []
+
+  return (
+    <div className="space-y-1">
+      {lines.length > 0 && (
+        <>
+          <p className="font-semibold">Формула:</p>
+          {lines.map((line, i) => (
+            <p key={i} className={i > 0 ? 'text-gray-500' : ''}>
+              {line}
+            </p>
+          ))}
+        </>
+      )}
+      <p className="text-gray-600">{col.tooltip!.text}</p>
+    </div>
+  )
+}
+
+
   return (
     <table className="w-full min-w-[1300px] table-auto text-sm">
       <thead className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b">
@@ -98,28 +120,31 @@ export default function DataTable({
                 >
                   <span className="inline-flex items-center whitespace-nowrap gap-2 align-middle">
                     <span>{col.label}</span>
-                    {col.tooltip && (
-                      <Tooltip
-                        align="left"
-                        text={col.tooltip.text}
-                        formula={col.tooltip.formula}
-                      />
-                    )}
+                    {col.tooltip && <Tooltip content={<TipContent col={col} />}>
+    <span className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50">
+      i
+    </span>
+  </Tooltip>}
                   </span>
                 </th>
-              );
+              )
             }
 
             return (
-              <th key={col.key} className={`px-4 py-3 font-semibold ${col.width ?? ''}`}>
+              <th
+                key={col.key}
+                className={`px-4 py-3 font-semibold ${col.width ?? ''}`}
+              >
                 <span className="inline-flex items-center whitespace-nowrap gap-2 align-middle">
                   <span>{col.label}</span>
-                  {col.tooltip && (
-                    <Tooltip text={col.tooltip.text} formula={col.tooltip.formula} />
-                  )}
+                  {col.tooltip && <Tooltip content={<TipContent col={col} />}>
+    <span className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50">
+      i
+    </span>
+  </Tooltip>}
                 </span>
               </th>
-            );
+            )
           })}
           {/* последняя колонка под кнопки/бейджи */}
           <th className="px-4 py-3 font-semibold w-[14%]" />
@@ -135,7 +160,7 @@ export default function DataTable({
           </tr>
         ) : (
           computed.rows.map((r) => {
-            const isEditing = editingId === r.id;
+            const isEditing = editingId === r.id
             return (
               <tr key={r.id} className="hover:bg-sky-50/60 transition">
                 {/* SKU — фиксированная липкая колонка с жёсткой шириной */}
@@ -230,12 +255,18 @@ export default function DataTable({
                 {/* Комиссия, ₽ */}
                 <td className="px-4 py-3 whitespace-nowrap">{fmtRub(r.fee)}</td>
                 {/* Прямые затраты, ₽ */}
-                <td className="px-4 py-3 whitespace-nowrap">{fmtRub(r.direct)}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  {fmtRub(r.direct)}
+                </td>
 
                 {/* Прибыль, ₽ */}
                 <td
                   className={`px-4 py-3 font-semibold whitespace-nowrap ${
-                    r.profit < 0 ? 'text-red-600' : r.profit > 0 ? 'text-green-600' : 'text-gray-800'
+                    r.profit < 0
+                      ? 'text-red-600'
+                      : r.profit > 0
+                      ? 'text-green-600'
+                      : 'text-gray-800'
                   }`}
                 >
                   {fmtRub(r.profit)}
@@ -297,7 +328,7 @@ export default function DataTable({
                   )}
                 </td>
               </tr>
-            );
+            )
           })
         )}
       </tbody>
@@ -337,7 +368,9 @@ export default function DataTable({
           </td>
 
           {/* Общая маржа, % */}
-          <td className={`px-4 py-3 font-bold whitespace-nowrap ${totalMarginClass}`}>
+          <td
+            className={`px-4 py-3 font-bold whitespace-nowrap ${totalMarginClass}`}
+          >
             {fmt(computed.totalMarginPct)}
             {'\u00A0'}%
           </td>
@@ -347,5 +380,5 @@ export default function DataTable({
         </tr>
       </tfoot>
     </table>
-  );
+  )
 }

@@ -1,23 +1,14 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
-import {
-  toNum,
-  clamp,
-  unitRevenue,
-  unitFee,
-  makeId,
-} from '../../lib/helpers'
+import { toNum, clamp, unitRevenue, unitFee, makeId } from '../../lib/helpers'
 import type { Row, RowWithMetrics } from '../../lib/types'
 import { loadRows, saveRows } from '../../lib/storage'
 
 import FormCard from './components/FormCard'
 import DataTable from './components/DataTable'
 
-import {
-  rowsWithMetricsToCSV,
-  downloadCSV,
-} from '../../lib/csv'
+import { rowsWithMetricsToCSV, downloadCSV } from '../../lib/csv'
 
 const SKU_COL_W = 'w-[150px] min-w-[150px] max-w-[150px]'
 
@@ -25,18 +16,90 @@ const headerColumns: Array<{
   key: string
   label: string
   width?: string
-  tooltip?: { text: string; formula?: string }
+  tooltip?: { text: string; formula?: string | string[]}
 }> = [
-  { key: 'sku',       label: 'SKU',                        width: 'w-[12%]', tooltip: { text: 'Уникальный идентификатор товара (артикул).' } },
-  { key: 'price',     label: 'Цена\u00A0\u20BD',           width: 'w-[12%]', tooltip: { text: 'Цена продажи за единицу товара, ₽.' } },
-  { key: 'cost',      label: 'Себестоимость\u00A0\u20BD',  width: 'w-[12%]', tooltip: { text: 'Сколько стоит произвести товар, ₽.' } },
-  { key: 'feePct',    label: 'Комиссия\u00A0%',            width: 'w-[10%]', tooltip: { text: 'Процент комиссии маркетплейса, %.', formula: 'Комиссия = Цена × (Комиссия % / 100)' } },
-  { key: 'logistics', label: 'Логистика\u00A0\u20BD',      width: 'w-[12%]', tooltip: { text: 'Затраты на доставку одной единицы товара, ₽.' } },
-  { key: 'rev',       label: 'Выручка\u00A0\u20BD',        width: 'w-[12%]', tooltip: { text: 'Доход от продажи 1 шт без учёта комиссии, ₽.', formula: 'Выручка = Цена × (1 - Скидка %)' } },
-  { key: 'fee',       label: 'Комиссия\u00A0\u20BD',       width: 'w-[12%]', tooltip: { text: 'Сумма комиссии в рублях.', formula: 'Комиссия ₽ = Выручка × (Комиссия % / 100)' } },
-  { key: 'direct',    label: 'Прямые затраты\u00A0\u20BD', width: 'w-[12%]', tooltip: { text: 'Себестоимость + Логистика, ₽.', formula: 'Прямые = Себестоимость + Логистика' } },
-  { key: 'profit',    label: 'Прибыль/шт\u00A0\u20BD',     width: 'w-[12%]', tooltip: { text: 'Доход с учётом всех затрат, ₽.', formula: 'Прибыль = Выручка - Комиссия ₽ - Прямые' } },
-  { key: 'margin',    label: 'Маржа\u00A0%',               width: 'w-[10%]', tooltip: { text: 'Отношение прибыли к выручке, %.', formula: 'Маржа = (Прибыль ÷ Выручка) × 100%' } },
+  {
+    key: 'sku',
+    label: 'SKU',
+    width: 'w-[12%]',
+    tooltip: { text: 'Уникальный идентификатор товара (артикул).' },
+  },
+  {
+    key: 'price',
+    label: 'Цена\u00A0\u20BD',
+    width: 'w-[12%]',
+    tooltip: { text: 'Цена продажи за единицу товара, ₽.' },
+  },
+  {
+    key: 'cost',
+    label: 'Себестоимость\u00A0\u20BD',
+    width: 'w-[12%]',
+    tooltip: { text: 'Сколько стоит произвести товар, ₽.' },
+  },
+  {
+    key: 'feePct',
+    label: 'Комиссия\u00A0%',
+    width: 'w-[10%]',
+    tooltip: {
+      text: 'Процент комиссии маркетплейса, %.',
+      formula: 'Комиссия ₽ = Цена ₽ × (Комиссия % / 100)',
+    },
+  },
+  {
+    key: 'logistics',
+    label: 'Логистика\u00A0\u20BD',
+    width: 'w-[12%]',
+    tooltip: { text: 'Затраты на доставку одной единицы товара, ₽.' },
+  },
+  {
+  key: 'rev',
+  label: 'Выручка\u00A0\u20BD',
+  width: 'w-[12%]',
+  tooltip: {
+    text: 'Доход от продажи 1 шт без учёта комиссии, ₽.',
+    formula: [
+      'Выручка ₽ = Цена ₽ × (1 - Скидка %)',
+      '(Скидка % автоматически переводится в долю: 15 % = 0.15)',
+    ],
+  },
+},
+
+  {
+    key: 'fee',
+    label: 'Комиссия\u00A0\u20BD',
+    width: 'w-[12%]',
+    tooltip: {
+      text: 'Сумма комиссии в рублях.',
+      formula: 'Комиссия ₽ = Выручка ₽ × (Комиссия % / 100 %)',
+    },
+  },
+  {
+    key: 'direct',
+    label: 'Прямые затраты\u00A0\u20BD',
+    width: 'w-[12%]',
+    tooltip: {
+      text: 'Себестоимость ₽ + Логистика, ₽.',
+      formula: 'Прямые затраты ₽ = Себестоимость ₽ + Логистика ₽',
+    },
+  },
+  {
+    key: 'profit',
+    label: 'Прибыль/шт\u00A0\u20BD',
+    width: 'w-[12%]',
+    tooltip: {
+      text: 'Доход с учётом всех затрат, ₽.',
+      formula: 'Прибыль ₽ = Выручка ₽ - Комиссия ₽ - Прямые затраты ₽',
+    },
+  },
+  {
+    key: 'margin',
+    label: 'Маржа\u00A0%',
+    width: 'w-[10%]',
+    tooltip: {
+      text: 'Отношение прибыли к выручке, %.',
+      formula: 'Маржа % = (Прибыль ₽ / Выручка ₽) × 100%',
+    },
+  },
 ]
 
 type ImportInfo =
@@ -80,12 +143,16 @@ export default function Home() {
   }
   const handleCancelEdit = () => {
     setEditingId(null)
-    setDraftSku(''); setDraftPrice(''); setDraftCost(''); setDraftFeePct(''); setDraftLogistics('')
+    setDraftSku('')
+    setDraftPrice('')
+    setDraftCost('')
+    setDraftFeePct('')
+    setDraftLogistics('')
   }
   const handleSaveEdit = () => {
     if (!editingId) return
-    setRows(prev =>
-      prev.map(r =>
+    setRows((prev) =>
+      prev.map((r) =>
         r.id === editingId
           ? {
               ...r,
@@ -107,23 +174,31 @@ export default function Home() {
   const f = clamp(toNum(feePct), 0, 100)
   const l = toNum(logistics)
 
-  const isInitialForm = [price, cost, feePct, logistics].every(v => v.trim() === '')
+  const isInitialForm = [price, cost, feePct, logistics].every(
+    (v) => v.trim() === ''
+  )
 
   const revenuePreview = unitRevenue(p, 0)
   const profitPreview = p - c - unitFee(p, f, 0) - l
-  const marginPreview = revenuePreview > 0 ? (profitPreview / revenuePreview) * 100 : 0
+  const marginPreview =
+    revenuePreview > 0 ? (profitPreview / revenuePreview) * 100 : 0
 
-  const previewProfitClass =
-    isInitialForm ? 'text-gray-900 font-semibold'
-    : profitPreview < 0 ? 'text-red-600 font-semibold'
-    : profitPreview > 0 ? 'text-green-600 font-semibold'
+  const previewProfitClass = isInitialForm
+    ? 'text-gray-900 font-semibold'
+    : profitPreview < 0
+    ? 'text-red-600 font-semibold'
+    : profitPreview > 0
+    ? 'text-green-600 font-semibold'
     : 'text-gray-900 font-semibold'
 
-  const previewMarginClass =
-    isInitialForm ? 'text-gray-900 font-semibold'
-    : marginPreview < 0 ? 'text-red-600 font-semibold'
-    : marginPreview < 20 ? 'text-yellow-600 font-semibold'
-    : marginPreview > 0 ? 'text-green-600 font-semibold'
+  const previewMarginClass = isInitialForm
+    ? 'text-gray-900 font-semibold'
+    : marginPreview < 0
+    ? 'text-red-600 font-semibold'
+    : marginPreview < 20
+    ? 'text-yellow-600 font-semibold'
+    : marginPreview > 0
+    ? 'text-green-600 font-semibold'
     : 'text-gray-900 font-semibold'
 
   // добавление/удаление
@@ -137,12 +212,20 @@ export default function Home() {
       feePct: f,
       logistics: l,
     }
-    setRows(prev => [newRow, ...prev])
+    setRows((prev) => [newRow, ...prev])
     if (!sheetOpen) setSheetOpen(true)
-    setSku(''); setPrice(''); setCost(''); setFeePct(''); setLogistics('')
+    setSku('')
+    setPrice('')
+    setCost('')
+    setFeePct('')
+    setLogistics('')
   }
-  const handleRemove = (id: string) => setRows(prev => prev.filter(r => r.id !== id))
-  const handleClearAll = () => setRows([])
+  const handleRemove = (id: string) =>
+    setRows((prev) => prev.filter((r) => r.id !== id))
+  const handleClearAll = () => {
+    setRows([])
+    setImportInfo(null)
+  }
 
   // localStorage
   useEffect(() => {
@@ -153,9 +236,15 @@ export default function Home() {
     saveRows(rows)
   }, [rows])
 
+  useEffect(() => {
+    if (!importInfo) return
+    const t = setTimeout(() => setImportInfo(null), 6000) // 6 секунд
+    return () => clearTimeout(t)
+  }, [importInfo])
+
   // пересчёт
   const computed = useMemo(() => {
-    const withMetrics = rows.map(r => {
+    const withMetrics = rows.map((r) => {
       const rev = unitRevenue(r.price, 0)
       const fee = unitFee(r.price, r.feePct, 0)
       const direct = r.cost + r.logistics
@@ -175,7 +264,8 @@ export default function Home() {
       { rev: 0, fee: 0, direct: 0, profit: 0 }
     )
 
-    const totalMarginPct = totals.rev > 0 ? (totals.profit / totals.rev) * 100 : 0
+    const totalMarginPct =
+      totals.rev > 0 ? (totals.profit / totals.rev) * 100 : 0
     return { rows: withMetrics, totals, totalMarginPct }
   }, [rows])
 
@@ -195,13 +285,108 @@ export default function Home() {
     return Number.isFinite(n) ? n : NaN
   }
 
+  const DISPLAY: Record<string, string> = {
+    sku: 'SKU',
+    price: 'Цена',
+    cost: 'Себестоимость',
+    feePct: 'Комиссия %',
+    logistics: 'Логистика',
+  }
+
+  function detectSep(sample: string): string {
+    const counts: Array<[string, number]> = [
+      [';', (sample.match(/;/g) || []).length],
+      [',', (sample.match(/,/g) || []).length],
+      ['\t', (sample.match(/\t/g) || []).length],
+    ]
+    counts.sort((a, b) => b[1] - a[1])
+    return counts[0][1] > 0 ? counts[0][0] : ';'
+  }
+
+  // маппим текст заголовка к каноническому ключу
+  function headerToKey(
+    h: string
+  ): 'sku' | 'price' | 'cost' | 'feePct' | 'logistics' | null {
+    const s = h
+      .toLowerCase()
+      .replace(/[₽\u20bd]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    if (
+      /(^|[^a-zа-я])sku([^a-zа-я]|$)|артикул|наимен|назв|товар|код|^id$/.test(s)
+    )
+      return 'sku'
+    if (/^price$|цена|розниц|продаж/.test(s)) return 'price'
+    if (/себестоим|закуп|^cost$/.test(s)) return 'cost'
+    if (/комисси|fee|процент/.test(s)) return 'feePct'
+    if (/логист|достав|фулф|fulfill/.test(s)) return 'logistics'
+    return null
+  }
+
+  // --- parser with header validation ---
   function parseBaseWithReport(text: string) {
-    const lines = text.replace(/\r\n?/g, '\n').split('\n').filter(Boolean)
+    const lines = text
+      .replace(/\r\n?/g, '\n')
+      .split('\n')
+      .filter((l) => l.trim().length > 0)
     if (lines.length === 0) {
       return { rows: [] as Row[], errors: ['Файл пустой.'] }
     }
-    const sep = lines[0].includes(';') ? ';' : ','
-    const startAt = /[A-Za-zА-Яа-яЁё]/.test(lines[0]) ? 1 : 0
+
+    const sep = detectSep(lines[0])
+    const first = lines[0].split(sep).map((s) => s.trim())
+
+    // Пытаемся распознать заголовок по совпадениям с известными колонками
+    const guessedKeys = first.map(headerToKey)
+    const matchedCount = guessedKeys.filter(Boolean).length
+    const hasHeader = matchedCount >= 3 // «похоже на заголовок»
+
+    // Если заголовок «похож», требуем наличие всех обязательных колонок
+    let startAt = 0
+    let idx: Record<'sku' | 'price' | 'cost' | 'feePct' | 'logistics', number> =
+      {
+        sku: 0,
+        price: 1,
+        cost: 2,
+        feePct: 3,
+        logistics: 4,
+      }
+
+    if (hasHeader) {
+      startAt = 1
+      const byKey: Partial<typeof idx> = {}
+      guessedKeys.forEach((k, i) => {
+        if (k) (byKey as Record<keyof typeof idx, number>)[k as keyof typeof idx] = i
+      })
+
+      const missing = (
+        ['sku', 'price', 'cost', 'feePct', 'logistics'] as const
+      ).filter((k) => byKey[k] === undefined)
+
+      if (missing.length > 0) {
+        const need = ['sku', 'price', 'cost', 'feePct', 'logistics']
+          .map((k) => DISPLAY[k as keyof typeof DISPLAY])
+          .join(`${sep}`)
+        return {
+          rows: [],
+          errors: [
+            `Заголовок не содержит обязательные столбцы: ${missing
+              .map((k) => DISPLAY[k])
+              .join(', ')}.`,
+            `Ожидается: ${need}`,
+          ],
+        }
+      }
+
+      idx = {
+        sku: byKey.sku!,
+        price: byKey.price!,
+        cost: byKey.cost!,
+        feePct: byKey.feePct!,
+        logistics: byKey.logistics!,
+      }
+    }
 
     const parsedRows: Row[] = []
     const errors: string[] = []
@@ -210,38 +395,48 @@ export default function Home() {
       const raw = lines[i].trim()
       if (!raw) continue
 
-      const cols = raw.split(sep).map(s => s.trim())
+      const cols = raw.split(sep).map((s) => s.trim())
+
+      // Проверка минимального количества столбцов в строке данных
       if (cols.length < 5) {
-        errors.push(`Строка ${i + 1}: нужно 5 столбцов — SKU, Цена, Себестоимость, Комиссия %, Логистика.`)
+        errors.push(
+          `Строка ${i + 1}: ожидается 5 столбцов, найдено ${cols.length}. ` +
+            `Формат: ${DISPLAY.sku}${sep}${DISPLAY.price}${sep}${DISPLAY.cost}${sep}${DISPLAY.feePct}${sep}${DISPLAY.logistics}`
+        )
         continue
       }
 
-      const [skuRaw, priceRaw, costRaw, feePctRaw, logisticsRaw] = cols
+      // Берём по индексам (из заголовка или позиционно)
+      const skuRaw = cols[idx.sku]
+      const priceRaw = cols[idx.price]
+      const costRaw = cols[idx.cost]
+      const feePctRaw = cols[idx.feePct]
+      const logisticsRaw = cols[idx.logistics]
+
       const sku = skuRaw?.trim()
       const price = parseNum(priceRaw)
       const cost = parseNum(costRaw)
       const feePct = clamp(parseNum(feePctRaw), 0, 100)
       const logistics = parseNum(logisticsRaw)
 
-      const badNums = [price, cost, feePct, logistics].some(v => Number.isNaN(v))
-
       if (!sku) {
         errors.push(`Строка ${i + 1}: пустой SKU.`)
         continue
       }
+
+      const badNums = [price, cost, feePct, logistics].some((v) =>
+        Number.isNaN(v)
+      )
       if (badNums) {
-        errors.push(`Строка ${i + 1}: проверьте числа (Цена/Себестоимость/Комиссия/Логистика).`)
+        errors.push(
+          `Строка ${
+            i + 1
+          }: проверьте числа (Цена/Себестоимость/Комиссия/Логистика).`
+        )
         continue
       }
 
-      parsedRows.push({
-        id: makeId(),
-        sku,
-        price,
-        cost,
-        feePct,
-        logistics,
-      })
+      parsedRows.push({ id: makeId(), sku, price, cost, feePct, logistics })
     }
 
     return { rows: parsedRows, errors }
@@ -249,7 +444,7 @@ export default function Home() {
 
   function downloadImportErrors(errors: string[]) {
     const header = 'Проблема\n'
-    const body = errors.map(e => e.replaceAll('\n', ' ')).join('\n')
+    const body = errors.map((e) => e.replaceAll('\n', ' ')).join('\n')
     const csv = '\uFEFF' + header + body + '\n'
     downloadCSV(csv, 'import-errors.csv')
   }
@@ -259,11 +454,43 @@ export default function Home() {
       <FormCard
         onSubmit={handleSubmit}
         fields={[
-          { id: 'sku',       label: 'SKU (название товара)', type: 'text',   value: sku,       set: setSku },
-          { id: 'price',     label: 'Цена продажи, ₽',       type: 'number', value: price,     set: setPrice },
-          { id: 'cost',      label: 'Себестоимость, ₽',      type: 'number', value: cost,      set: setCost },
-          { id: 'feePct',    label: 'Комиссия площадки, %',  type: 'number', value: feePct,    set: setFeePct, min: 0, max: 100 },
-          { id: 'logistics', label: 'Логистика, ₽/шт',       type: 'number', value: logistics, set: setLogistics },
+          {
+            id: 'sku',
+            label: 'SKU (название товара)',
+            type: 'text',
+            value: sku,
+            set: setSku,
+          },
+          {
+            id: 'price',
+            label: 'Цена продажи, ₽',
+            type: 'number',
+            value: price,
+            set: setPrice,
+          },
+          {
+            id: 'cost',
+            label: 'Себестоимость, ₽',
+            type: 'number',
+            value: cost,
+            set: setCost,
+          },
+          {
+            id: 'feePct',
+            label: 'Комиссия площадки, %',
+            type: 'number',
+            value: feePct,
+            set: setFeePct,
+            min: 0,
+            max: 100,
+          },
+          {
+            id: 'logistics',
+            label: 'Логистика, ₽/шт',
+            type: 'number',
+            value: logistics,
+            set: setLogistics,
+          },
         ]}
         previewProfitClass={previewProfitClass}
         profitPreview={profitPreview}
@@ -283,7 +510,9 @@ export default function Home() {
         className={[
           'fixed inset-x-0 bottom-0 z-30',
           'transform transition-transform duration-500 ease-in-out will-change-[transform]',
-          sheetOpen ? 'translate-y-0 pointer-events-auto' : 'translate-y-full pointer-events-none',
+          sheetOpen
+            ? 'translate-y-0 pointer-events-auto'
+            : 'translate-y-full pointer-events-none',
         ].join(' ')}
       >
         <div className="mx-auto w-full max-w-[1400px] px-4">
@@ -295,7 +524,8 @@ export default function Home() {
             {/* тулбар */}
             <div className="flex items-center justify-between px-4 py-3">
               <div className="text-sm text-gray-600">
-                Всего позиций: <span className="font-semibold">{rows.length}</span>
+                Всего позиций:&nbsp;
+                <span className="font-semibold">{rows.length}</span>
               </div>
 
               <div className="flex items-center gap-2">
@@ -316,22 +546,23 @@ export default function Home() {
                     accept=".csv,text/csv"
                     className="hidden"
                     onChange={async (e) => {
-                      const inputEl = e.currentTarget as HTMLInputElement; // Сохранили ссылку ДО await
+                      const inputEl = e.currentTarget as HTMLInputElement // Сохранили ссылку ДО await
                       const file = inputEl.files?.[0]
                       if (!file) return
 
                       try {
                         const text = await file.text()
-                        const { rows: parsed, errors } = parseBaseWithReport(text)
+                        const { rows: parsed, errors } =
+                          parseBaseWithReport(text)
 
                         if (parsed.length === 0) {
                           setImportInfo({
                             type: 'error',
-                            msg: 'Ничего не импортировано. Проверьте формат файла.',
+                            msg: 'Проверьте правильность данных.',
                             errors,
                           })
                         } else {
-                          setRows(prev => [...parsed, ...prev])
+                          setRows((prev) => [...parsed, ...prev])
                           if (errors.length > 0) {
                             setImportInfo({
                               type: 'warn',
@@ -377,14 +608,28 @@ export default function Home() {
                       <p className="font-semibold mb-1">Как импортировать</p>
                       <div className="space-y-1">
                         <p>
-                          Для импорта используйте только поля: <b>SKU, Цена, Себестоимость, Комиссия %, Логистика</b>.<br />
-                          Остальные показатели программа рассчитает автоматически.
+                          Для импорта используйте только поля: &nbsp;
+                           <br /> <b>SKU, Цена, Себестоимость, Комиссия %, Логистика</b>
+                          .<br />
+                          Остальные показатели программа рассчитает
+                          автоматически.
                         </p>
-                        <p className="mt-2">📌 Поддерживаются такие варианты:</p>
-                        <p>– Разделители: <code>;</code> или <code>,</code> (пример: <code>SKU;100;50;10;20</code>)</p>
-                        <p>– Цены: <code>100</code> или <code>100,50 ₽</code></p>
-                        <p>– Комиссия: <code>10</code> или <code>10 %</code></p>
-                        <p>– Логистика: <code>20</code> или <code>20 ₽</code></p>
+                        <p className="mt-2">
+                          📌 Поддерживаются такие варианты:
+                        </p>
+                        <p>
+                          – Разделители: <code>;</code> или <code>,</code>&nbsp;
+                          (пример: <code>SKU;100;50;10;20</code>)
+                        </p>
+                        <p>
+                          – Цены: <code>100</code> или <code>100,50 ₽</code>
+                        </p>
+                        <p>
+                          – Комиссия: <code>10</code> или <code>10 %</code>
+                        </p>
+                        <p>
+                          – Логистика: <code>20</code> или <code>20 ₽</code>
+                        </p>
                       </div>
                     </div>
                   </button>
@@ -402,39 +647,6 @@ export default function Home() {
                   </button>
                 </div>
 
-                {/* Бейдж результата импорта */}
-                {importInfo && (
-                  <div
-                    className={[
-                      'ml-2 px-3 py-1.5 rounded-lg text-sm shadow-sm border',
-                      importInfo.type === 'success' && 'bg-emerald-50 text-emerald-800 border-emerald-200',
-                      importInfo.type === 'warn' && 'bg-amber-50 text-amber-800 border-amber-200',
-                      importInfo.type === 'error' && 'bg-rose-50 text-rose-800 border-rose-200',
-                    ].join(' ')}
-                  >
-                    <span>{importInfo.msg}</span>
-                    {'errors' in importInfo && importInfo.errors && importInfo.errors.length > 0 && (
-                      <>
-                        {' '}
-                        <button
-                          onClick={() => downloadImportErrors(importInfo.errors!)}
-                          className="underline decoration-dotted hover:no-underline"
-                        >
-                          Отчёт
-                        </button>
-                      </>
-                    )}
-                    {' '}
-                    <button
-                      onClick={() => setImportInfo(null)}
-                      className="ml-2 opacity-70 hover:opacity-100"
-                      title="Скрыть"
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
-
                 {/* чекбокс единиц + экспорт */}
                 <label className="flex items-center gap-2 text-sm text-gray-700 ml-2">
                   <input
@@ -443,7 +655,7 @@ export default function Home() {
                     checked={addUnits}
                     onChange={(e) => setAddUnits(e.target.checked)}
                   />
-                  Добавить единицы измерения
+                  с ед. изм.
                 </label>
 
                 {rows.length > 0 && (
@@ -453,7 +665,10 @@ export default function Home() {
                         computed.rows as RowWithMetrics[],
                         addUnits
                       )
-                      const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
+                      const stamp = new Date()
+                        .toISOString()
+                        .replace(/[:T]/g, '-')
+                        .slice(0, 19)
                       downloadCSV(csv, `sku-profit-${stamp}.csv`)
                     }}
                     className="px-4 py-2 rounded-xl border border-indigo-300 text-indigo-700 bg-white/90 hover:bg-indigo-50 transition"
@@ -463,13 +678,61 @@ export default function Home() {
                 )}
 
                 <button
-                  onClick={() => setSheetOpen(false)}
+                  onClick={() => { setSheetOpen(false); setImportInfo(null) }}
                   className="px-4 py-2 rounded-xl bg-gray-800 text-white hover:bg-gray-700 transition"
                 >
                   Закрыть
                 </button>
               </div>
             </div>
+            {importInfo && (
+              <div
+                className={[
+                  'absolute top-3 right-3 z-50 max-w-[420px]',
+                  'px-3 py-2 rounded-lg text-sm shadow-lg border',
+                  importInfo.type === 'success' &&
+                    'bg-emerald-50 text-emerald-800 border-emerald-200',
+                  importInfo.type === 'warn' &&
+                    'bg-amber-50 text-amber-800 border-amber-200',
+                  importInfo.type === 'error' &&
+                    'bg-rose-50 text-rose-800 border-rose-200',
+                ].join(' ')}
+              >
+                <div className="flex items-start gap-2">
+                  <div className="flex-1">
+                    <span className="font-medium">
+                      {importInfo.type === 'success'
+                        ? 'Готово'
+                        : importInfo.type === 'warn'
+                        ? 'Частично'
+                        : 'Ошибка'}
+                    </span>
+                    <span className="ml-2">{importInfo.msg}</span>
+
+                    {(importInfo.type === 'warn' ||
+                      importInfo.type === 'error') &&
+                      importInfo.errors &&
+                      importInfo.errors.length > 0 && (
+                        <button
+                          onClick={() =>
+                            downloadImportErrors(importInfo.errors!)
+                          }
+                          className="ml-2 underline decoration-dotted hover:no-underline"
+                        >
+                          Отчёт
+                        </button>
+                      )}
+                  </div>
+
+                  <button
+                    onClick={() => setImportInfo(null)}
+                    className="ml-2 shrink-0 rounded-md px-2 py-0.5 hover:bg-black/5"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* таблица */}
             <div className="max-h-[55vh] overflow-auto overflow-x-auto">
