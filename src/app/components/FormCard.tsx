@@ -1,7 +1,7 @@
-'use client';
+'use client'
 
-import { Field } from '../../../lib/types';
-import { fmt, fmtRub } from '../../../lib/helpers';
+import { Field } from '../../lib/types'
+import { fmt, fmtRub } from '../../lib/helpers'
 
 export default function FormCard({
   fields,
@@ -12,13 +12,13 @@ export default function FormCard({
   previewMarginClass,
   onOpenTable,
 }: {
-  fields: Field[];
-  onSubmit: (e: React.FormEvent<Element>) => void;
-  profitPreview: number;
-  marginPreview: number;
-  previewProfitClass: string;
-  previewMarginClass: string;
-  onOpenTable: () => void;
+  fields: Field[]
+  onSubmit: (e: React.FormEvent<Element>) => void
+  profitPreview: number
+  marginPreview: number
+  previewProfitClass: string
+  previewMarginClass: string
+  onOpenTable: () => void
 }) {
   return (
     <form
@@ -66,10 +66,12 @@ export default function FormCard({
       <div className="mt-2 rounded-xl border border-indigo-100 bg-indigo-50/70 text-indigo-900 text-sm p-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="text-center grow">
-            Прибыль с 1 шт: <span className={previewProfitClass}>{fmtRub(profitPreview)}</span>
+            Прибыль с 1 шт:{' '}
+            <span className={previewProfitClass}>{fmtRub(profitPreview)}</span>
           </div>
           <div className="text-center grow">
-            Маржа: <span className={previewMarginClass}>{fmt(marginPreview)} </span>%
+            Маржа:{' '}
+            <span className={previewMarginClass}>{fmt(marginPreview)} </span>%
           </div>
         </div>
       </div>
@@ -91,5 +93,5 @@ export default function FormCard({
         </button>
       </div>
     </form>
-  );
+  )
 }

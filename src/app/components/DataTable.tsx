@@ -1,7 +1,7 @@
 'use client'
 
 import Tooltip from './Tooltip'
-import { fmt, fmtRub } from '../../../lib/helpers'
+import { fmt, fmtRub } from '../../lib/helpers'
 
 /* ================== типы пропсов ================== */
 
@@ -9,7 +9,7 @@ type HeaderCol = {
   key: string
   label: string
   width?: string
-  tooltip?: { text: string; formula?: string | string[]}
+  tooltip?: { text: string; formula?: string | string[] }
 }
 
 type RowWithMetrics = {
@@ -81,27 +81,26 @@ export default function DataTable({
   handleRemove,
   totalMarginClass,
 }: DataTableProps) {
-    const TipContent = ({ col }: { col: HeaderCol }) => {
-  const f = col.tooltip?.formula
-  const lines = f ? (Array.isArray(f) ? f : String(f).split(/\r?\n/)) : []
+  const TipContent = ({ col }: { col: HeaderCol }) => {
+    const f = col.tooltip?.formula
+    const lines = f ? (Array.isArray(f) ? f : String(f).split(/\r?\n/)) : []
 
-  return (
-    <div className="space-y-1">
-      {lines.length > 0 && (
-        <>
-          <p className="font-semibold">Формула:</p>
-          {lines.map((line, i) => (
-            <p key={i} className={i > 0 ? 'text-gray-500' : ''}>
-              {line}
-            </p>
-          ))}
-        </>
-      )}
-      <p className="text-gray-600">{col.tooltip!.text}</p>
-    </div>
-  )
-}
-
+    return (
+      <div className="space-y-1">
+        {lines.length > 0 && (
+          <>
+            <p className="font-semibold">Формула:</p>
+            {lines.map((line, i) => (
+              <p key={i} className={i > 0 ? 'text-gray-500' : ''}>
+                {line}
+              </p>
+            ))}
+          </>
+        )}
+        <p className="text-gray-600">{col.tooltip!.text}</p>
+      </div>
+    )
+  }
 
   return (
     <table className="w-full min-w-[1300px] table-auto text-sm">
@@ -120,11 +119,13 @@ export default function DataTable({
                 >
                   <span className="inline-flex items-center whitespace-nowrap gap-2 align-middle">
                     <span>{col.label}</span>
-                    {col.tooltip && <Tooltip content={<TipContent col={col} />}>
-    <span className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50">
-      i
-    </span>
-  </Tooltip>}
+                    {col.tooltip && (
+                      <Tooltip content={<TipContent col={col} />}>
+                        <span className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50">
+                          i
+                        </span>
+                      </Tooltip>
+                    )}
                   </span>
                 </th>
               )
@@ -137,11 +138,13 @@ export default function DataTable({
               >
                 <span className="inline-flex items-center whitespace-nowrap gap-2 align-middle">
                   <span>{col.label}</span>
-                  {col.tooltip && <Tooltip content={<TipContent col={col} />}>
-    <span className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50">
-      i
-    </span>
-  </Tooltip>}
+                  {col.tooltip && (
+                    <Tooltip content={<TipContent col={col} />}>
+                      <span className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50">
+                        i
+                      </span>
+                    </Tooltip>
+                  )}
                 </span>
               </th>
             )

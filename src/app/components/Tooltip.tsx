@@ -91,3 +91,12 @@ export default function Tooltip({ children, content, maxWidth = 360 }: Props) {
     </>
   )
 }
+
+const user = {
+  name: "Alex",
+  age: 25,
+  isAdmin: false,
+  greet:()=> {
+    console.log("Hello!");
+  }
+};

@@ -1,22 +1,60 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
-import { toNum, clamp, unitRevenue, unitFee, makeId } from '../../lib/helpers'
-import type { Row, RowWithMetrics } from '../../lib/types'
-import { loadRows, saveRows } from '../../lib/storage'
-
+import { toNum, clamp, unitRevenue, unitFee, makeId } from '../lib/helpers'
+import type { Row, RowWithMetrics } from '../lib/types'
+import { loadRows, saveRows } from '../lib/storage'
 import FormCard from './components/FormCard'
 import DataTable from './components/DataTable'
+import { rowsWithMetricsToCSV, downloadCSV } from '../lib/csv'
+import { fetchRowsAction, upsertRowAction, deleteRowAction } from '../app/actions/rows'
+import { supabase } from '../lib/supabase/client'
+import Link from 'next/link'
+import { LogoutButton } from './components/LogoutButton'
+import { clearAllRowsAction } from '../app/actions/rows'; // рядом с остальными экшенами
 
-import { rowsWithMetricsToCSV, downloadCSV } from '../../lib/csv'
+
+
+
 
 const SKU_COL_W = 'w-[150px] min-w-[150px] max-w-[150px]'
+
+
+// тип строки из БД (fee в рублях/процентах — как у тебя в таблице)
+type DbRow = {
+  id: string;
+  sku: string;
+  price: number;
+  cost: number;
+  fee: number;        // ← в БД поле называется fee
+  logistics: number;
+};
+
+// конвертеры UI ↔ DB
+const dbToUi = (r: DbRow): Row => ({
+  id: r.id,
+  sku: r.sku,
+  price: r.price,
+  cost: r.cost,
+  feePct: r.fee,      // ← fee -> feePct
+  logistics: r.logistics,
+});
+
+const uiToDb = (r: Row) => ({
+  id: r.id,
+  sku: r.sku,
+  price: r.price,
+  cost: r.cost,
+  fee: r.feePct,      // ← feePct -> fee
+  logistics: r.logistics,
+});
+
 
 const headerColumns: Array<{
   key: string
   label: string
   width?: string
-  tooltip?: { text: string; formula?: string | string[]}
+  tooltip?: { text: string; formula?: string | string[] }
 }> = [
   {
     key: 'sku',
@@ -52,17 +90,17 @@ const headerColumns: Array<{
     tooltip: { text: 'Затраты на доставку одной единицы товара, ₽.' },
   },
   {
-  key: 'rev',
-  label: 'Выручка\u00A0\u20BD',
-  width: 'w-[12%]',
-  tooltip: {
-    text: 'Доход от продажи 1 шт без учёта комиссии, ₽.',
-    formula: [
-      'Выручка ₽ = Цена ₽ × (1 - Скидка %)',
-      '(Скидка % автоматически переводится в долю: 15 % = 0.15)',
-    ],
+    key: 'rev',
+    label: 'Выручка\u00A0\u20BD',
+    width: 'w-[12%]',
+    tooltip: {
+      text: 'Доход от продажи 1 шт без учёта комиссии, ₽.',
+      formula: [
+        'Выручка ₽ = Цена ₽ × (1 - Скидка %)',
+        '(Скидка % автоматически переводится в долю: 15 % = 0.15)',
+      ],
+    },
   },
-},
 
   {
     key: 'fee',
@@ -114,6 +152,7 @@ export default function Home() {
   const [cost, setCost] = useState('')
   const [feePct, setFeePct] = useState('')
   const [logistics, setLogistics] = useState('')
+  const [authed, setAuthed] = useState(false)
 
   // данные/шторка
   const [rows, setRows] = useState<Row[]>([])
@@ -149,24 +188,28 @@ export default function Home() {
     setDraftFeePct('')
     setDraftLogistics('')
   }
-  const handleSaveEdit = () => {
-    if (!editingId) return
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === editingId
-          ? {
-              ...r,
-              sku: draftSku.trim() || r.sku,
-              price: toNum(draftPrice),
-              cost: toNum(draftCost),
-              feePct: clamp(toNum(draftFeePct), 0, 100),
-              logistics: toNum(draftLogistics),
-            }
-          : r
-      )
-    )
-    handleCancelEdit()
+  
+  const handleSaveEdit = async () => {
+  if (!editingId) return;
+  const edited: Row = {
+    id: editingId,
+    sku: draftSku.trim() || '',
+    price: toNum(draftPrice),
+    cost: toNum(draftCost),
+    feePct: clamp(toNum(draftFeePct), 0, 100),
+    logistics: toNum(draftLogistics),
+  };
+
+  if (authed) {
+    await upsertRowAction(uiToDb(edited));
+    const { rows: dbRows } = await fetchRowsAction();
+    setRows((dbRows as DbRow[]).map(dbToUi));
+  } else {
+    setRows(prev => prev.map(r => (r.id === editingId ? edited : r)));
   }
+  handleCancelEdit();
+};
+
 
   // превью
   const p = toNum(price)
@@ -202,30 +245,48 @@ export default function Home() {
     : 'text-gray-900 font-semibold'
 
   // добавление/удаление
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    const newRow: Row = {
-      id: makeId(),
-      sku: sku.trim() || `SKU-${rows.length + 1}`,
-      price: p,
-      cost: c,
-      feePct: f,
-      logistics: l,
-    }
-    setRows((prev) => [newRow, ...prev])
-    if (!sheetOpen) setSheetOpen(true)
-    setSku('')
-    setPrice('')
-    setCost('')
-    setFeePct('')
-    setLogistics('')
+  const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  const newRow: Row = {
+    id: makeId(),
+    sku: sku.trim() || `SKU-${rows.length + 1}`,
+    price: p,
+    cost: c,
+    feePct: f,        // ← как и раньше в UI
+    logistics: l,
+  };
+
+  if (authed) {
+    await upsertRowAction(uiToDb(newRow));     // ← маппим при отправке в БД
+    const { rows: dbRows } = await fetchRowsAction();
+    setRows((dbRows as DbRow[]).map(dbToUi));  // ← маппим обратно
+  } else {
+    setRows(prev => [newRow, ...prev]);
   }
-  const handleRemove = (id: string) =>
-    setRows((prev) => prev.filter((r) => r.id !== id))
-  const handleClearAll = () => {
-    setRows([])
-    setImportInfo(null)
+
+  if (!sheetOpen) setSheetOpen(true);
+  setSku(''); setPrice(''); setCost(''); setFeePct(''); setLogistics('');
+};
+
+  const handleRemove = async (id: string) => {
+  if (authed) {
+    await deleteRowAction(id);
+    const { rows: dbRows } = await fetchRowsAction();
+    setRows((dbRows as DbRow[]).map(dbToUi));
+  } else {
+    setRows(prev => prev.filter(r => r.id !== id));
   }
+};
+
+
+  const handleClearAll = async () => {
+  if (authed) {
+    await clearAllRowsAction();
+  }
+  setRows([]);
+  setImportInfo(null);
+};
 
   // localStorage
   useEffect(() => {
@@ -241,6 +302,33 @@ export default function Home() {
     const t = setTimeout(() => setImportInfo(null), 6000) // 6 секунд
     return () => clearTimeout(t)
   }, [importInfo])
+
+  useEffect(() => {
+  async function init() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      setAuthed(true);
+      const { rows: dbRows } = await fetchRowsAction();
+      setRows((dbRows as DbRow[]).map(dbToUi));
+    } else {
+      const saved = loadRows<Row>();
+      if (saved.length) setRows(saved);
+    }
+  }
+  init();
+}, []);
+
+
+useEffect(() => {
+  if (!authed) saveRows(rows);
+}, [rows, authed]);
+
+useEffect(() => {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    (_event, session) => setAuthed(!!session)
+  );
+  return () => subscription.unsubscribe();
+}, []);
 
   // пересчёт
   const computed = useMemo(() => {
@@ -357,7 +445,8 @@ export default function Home() {
       startAt = 1
       const byKey: Partial<typeof idx> = {}
       guessedKeys.forEach((k, i) => {
-        if (k) (byKey as Record<keyof typeof idx, number>)[k as keyof typeof idx] = i
+        if (k)
+          (byKey as Record<keyof typeof idx, number>)[k as keyof typeof idx] = i
       })
 
       const missing = (
@@ -451,6 +540,18 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen items-start justify-center py-10 px-4 relative z-10">
+      <header className="flex items-center justify-between mb-4">
+  <h1 className="text-2xl font-semibold">Калькулятор прибыли</h1>
+  {authed ? (
+    <LogoutButton onAfterSignOut={() => {
+    setAuthed(false);
+    setRows(loadRows<Row>());  // сразу показать локальные данные (если есть)
+    setImportInfo(null);
+  }}/>
+  ) : (
+    <Link href="/login" className="underline">Войти</Link>
+  )}
+</header>
       <FormCard
         onSubmit={handleSubmit}
         fields={[
@@ -609,7 +710,8 @@ export default function Home() {
                       <div className="space-y-1">
                         <p>
                           Для импорта используйте только поля: &nbsp;
-                           <br /> <b>SKU, Цена, Себестоимость, Комиссия %, Логистика</b>
+                          <br />{' '}
+                          <b>SKU, Цена, Себестоимость, Комиссия %, Логистика</b>
                           .<br />
                           Остальные показатели программа рассчитает
                           автоматически.
@@ -678,7 +780,10 @@ export default function Home() {
                 )}
 
                 <button
-                  onClick={() => { setSheetOpen(false); setImportInfo(null) }}
+                  onClick={() => {
+                    setSheetOpen(false)
+                    setImportInfo(null)
+                  }}
                   className="px-4 py-2 rounded-xl bg-gray-800 text-white hover:bg-gray-700 transition"
                 >
                   Закрыть
