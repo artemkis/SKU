@@ -12,6 +12,7 @@ export function LogoutButton({
     await supabase.auth.signOut();     // разлогиниваем
     onAfterSignOut?.();                // сразу переключаем UI
     router.refresh();                  // обновим серверные части/куки
+   
     // можно вместо refresh:
     // router.replace('/'); // или router.push('/login')
   };
