@@ -11,17 +11,21 @@ import {
   fetchRowsAction,
   upsertRowAction,
   deleteRowAction,
-  clearAllRowsAction,
 } from '../app/actions/rows'
 import { supabase } from '../lib/supabase/client'
 import Link from 'next/link'
 import { LogoutButton } from './components/LogoutButton'
+import { clearAllRowsAction } from '../app/actions/rows' // рядом с остальными экшенами
+
+// [ADD] XLSX экспорт
 import * as XLSX from 'xlsx'
 
+// [ADD] Мини-дашборд (recharts)
+import MiniDashboard from './components/MiniDashboard'
 
 const SKU_COL_W = 'w-[150px] min-w-[150px] max-w-[150px]'
 
-/** Тип строки из БД (fee в рублях/процентах — как у тебя в таблице) */
+// тип строки из БД (fee в рублях/процентах — как у тебя в таблице)
 type DbRow = {
   id: string
   sku: string
@@ -31,7 +35,7 @@ type DbRow = {
   logistics: number
 }
 
-/** Конвертеры UI ↔ DB */
+// конвертеры UI ↔ DB
 const dbToUi = (r: DbRow): Row => ({
   id: r.id,
   sku: r.sku,
@@ -56,96 +60,99 @@ const headerColumns: Array<{
   width?: string
   tooltip?: { text: string; formula?: string | string[] }
 }> = [
-    {
-      key: 'sku',
-      label: 'SKU',
-      width: 'w-[12%]',
-      tooltip: { text: 'Уникальный идентификатор товара (артикул).' },
+  {
+    key: 'sku',
+    label: 'SKU',
+    width: 'w-[12%]',
+    tooltip: { text: 'Уникальный идентификатор товара (артикул).' },
+  },
+  {
+    key: 'price',
+    label: 'Цена\u00A0\u20BD',
+    width: 'w-[12%]',
+    tooltip: { text: 'Цена продажи за единицу товара, ₽.' },
+  },
+  {
+    key: 'cost',
+    label: 'Себестоимость\u00A0\u20BD',
+    width: 'w-[12%]',
+    tooltip: { text: 'Сколько стоит произвести товар, ₽.' },
+  },
+  {
+    key: 'feePct',
+    label: 'Комиссия\u00A0%',
+    width: 'w-[10%]',
+    tooltip: {
+      text: 'Процент комиссии маркетплейса, %.',
+      formula: 'Комиссия ₽ = Цена ₽ × (Комиссия % / 100)',
     },
-    {
-      key: 'price',
-      label: 'Цена\u00A0\u20BD',
-      width: 'w-[12%]',
-      tooltip: { text: 'Цена продажи за единицу товара, ₽.' },
+  },
+  {
+    key: 'logistics',
+    label: 'Логистика\u00A0\u20BD',
+    width: 'w-[12%]',
+    tooltip: { text: 'Затраты на доставку одной единицы товара, ₽.' },
+  },
+  {
+    key: 'rev',
+    label: 'Выручка\u00A0\u20BD',
+    width: 'w-[12%]',
+    tooltip: {
+      text: 'Доход от продажи 1 шт без учёта комиссии, ₽.',
+      formula: [
+        'Выручка ₽ = Цена ₽ × (1 - Скидка %)',
+        '(Скидка % автоматически переводится в долю: 15 % = 0.15)',
+      ],
     },
-    {
-      key: 'cost',
-      label: 'Себестоимость\u00A0\u20BD',
-      width: 'w-[12%]',
-      tooltip: { text: 'Сколько стоит произвести товар, ₽.' },
+  },
+  {
+    key: 'fee',
+    label: 'Комиссия\u00A0\u20BD',
+    width: 'w-[12%]',
+    tooltip: {
+      text: 'Сумма комиссии в рублях.',
+      formula: 'Комиссия ₽ = Выручка ₽ × (Комиссия % / 100 %)',
     },
-    {
-      key: 'feePct',
-      label: 'Комиссия\u00A0%',
-      width: 'w-[10%]',
-      tooltip: {
-        text: 'Процент комиссии маркетплейса, %.',
-        formula: 'Комиссия ₽ = Цена ₽ × (Комиссия % / 100)',
-      },
+  },
+  {
+    key: 'direct',
+    label: 'Прямые затраты\u00A0\u20BD',
+    width: 'w-[12%]',
+    tooltip: {
+      text: 'Себестоимость ₽ + Логистика, ₽.',
+      formula: 'Прямые затраты ₽ = Себестоимость ₽ + Логистика ₽',
     },
-    {
-      key: 'logistics',
-      label: 'Логистика\u00A0\u20BD',
-      width: 'w-[12%]',
-      tooltip: { text: 'Затраты на доставку одной единицы товара, ₽.' },
+  },
+  {
+    key: 'profit',
+    label: 'Прибыль/шт\u00A0\u20BD',
+    width: 'w-[12%]',
+    tooltip: {
+      text: 'Доход с учётом всех затрат, ₽.',
+      formula: 'Прибыль ₽ = Выручка ₽ - Комиссия ₽ - Прямые затраты ₽',
     },
-    {
-      key: 'rev',
-      label: 'Выручка\u00A0\u20BD',
-      width: 'w-[12%]',
-      tooltip: {
-        text: 'Доход от продажи 1 шт без учёта комиссии, ₽.',
-        formula: [
-          'Выручка ₽ = Цена ₽ × (1 - Скидка %)',
-          '(Скидка % автоматически переводится в долю: 15 % = 0.15)',
-        ],
-      },
+  },
+  {
+    key: 'margin',
+    label: 'Маржа\u00A0%',
+    width: 'w-[10%]',
+    tooltip: {
+      text: 'Отношение прибыли к выручке, %.',
+      formula: 'Маржа % = (Прибыль ₽ / Выручка ₽) × 100%',
     },
-    {
-      key: 'fee',
-      label: 'Комиссия\u00A0\u20BD',
-      width: 'w-[12%]',
-      tooltip: {
-        text: 'Сумма комиссии в рублях.',
-        formula: 'Комиссия ₽ = Выручка ₽ × (Комиссия % / 100 %)',
-      },
-    },
-    {
-      key: 'direct',
-      label: 'Прямые затраты\u00A0\u20BD',
-      width: 'w-[12%]',
-      tooltip: {
-        text: 'Себестоимость ₽ + Логистика, ₽.',
-        formula: 'Прямые затраты ₽ = Себестоимость ₽ + Логистика ₽',
-      },
-    },
-    {
-      key: 'profit',
-      label: 'Прибыль/шт\u00A0\u20BD',
-      width: 'w-[12%]',
-      tooltip: {
-        text: 'Доход с учётом всех затрат, ₽.',
-        formula: 'Прибыль ₽ = Выручка ₽ - Комиссия ₽ - Прямые затраты ₽',
-      },
-    },
-    {
-      key: 'margin',
-      label: 'Маржа\u00A0%',
-      width: 'w-[10%]',
-      tooltip: {
-        text: 'Отношение прибыли к выручке, %.',
-        formula: 'Маржа % = (Прибыль ₽ / Выручка ₽) × 100%',
-      },
-    },
-  ]
+  },
+]
 
 type ImportInfo =
   | { type: 'success'; msg: string }
   | { type: 'warn'; msg: string; errors: string[] }
   | { type: 'error'; msg: string; errors?: string[] }
 
+// [ADD] тип для серии маржи (дашборд)
+type MarginPoint = { ts: number; margin: number }
+
 export default function Home() {
-  /** Поля формы */
+  // форма
   const [sku, setSku] = useState('')
   const [price, setPrice] = useState('')
   const [cost, setCost] = useState('')
@@ -153,17 +160,17 @@ export default function Home() {
   const [logistics, setLogistics] = useState('')
   const [authed, setAuthed] = useState(false)
 
-  /** Данные/шторка */
+  // данные/шторка
   const [rows, setRows] = useState<Row[]>([])
   const [sheetOpen, setSheetOpen] = useState(false)
 
-  /** Экспорт опция */
+  // экспорт опция
   const [addUnits, setAddUnits] = useState(false)
 
-  /** Уведомление об импорте */
+  // уведомление об импорте
   const [importInfo, setImportInfo] = useState<ImportInfo | null>(null)
 
-  /** Редактирование */
+  // редактирование
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftSku, setDraftSku] = useState('')
   const [draftPrice, setDraftPrice] = useState('')
@@ -171,60 +178,24 @@ export default function Home() {
   const [draftFeePct, setDraftFeePct] = useState('')
   const [draftLogistics, setDraftLogistics] = useState('')
 
-  /** Страховка — если редактируемая строка пропала */
+  // [ADD] История «Общей маржи во времени» (дашборд), хранение в localStorage
+  const [marginSeries, setMarginSeries] = useState<MarginPoint[]>(() => {
+    try {
+      const raw =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('metrics:marginSeries')
+          : null
+      return raw ? (JSON.parse(raw) as MarginPoint[]) : []
+    } catch {
+      return []
+    }
+  })
+
   useEffect(() => {
     if (editingId && !rows.some((r) => r.id === editingId)) {
       setEditingId(null)
     }
   }, [rows, editingId])
-
-  function exportXLSX(rows: RowWithMetrics[], addUnits: boolean) {
-    // Заголовки
-    const headers = [
-      'SKU',
-      `Цена${addUnits ? ' ₽' : ''}`,
-      `Себестоимость${addUnits ? ' ₽' : ''}`,
-      `Комиссия${addUnits ? ' %' : ''}`,
-      `Логистика${addUnits ? ' ₽' : ''}`,
-      `Выручка${addUnits ? ' ₽' : ''}`,
-      `Комиссия${addUnits ? ' ₽' : ''}`,
-      `Прямые затраты${addUnits ? ' ₽' : ''}`,
-      `Прибыль/шт${addUnits ? ' ₽' : ''}`,
-      `Маржа${addUnits ? ' %' : ''}`,
-    ]
-
-
-    // Данные
-    const data = rows.map((r) => ([
-      r.sku,
-      r.price,
-      r.cost,
-      r.feePct,
-      r.logistics,
-      r.rev,
-      r.fee,
-      r.direct,
-      r.profit,
-      Number(r.marginPct.toFixed(2)),
-    ]))
-
-    // Собираем таблицу (AOA -> sheet)
-    const aoa = [headers, ...data]
-    const ws = XLSX.utils.aoa_to_sheet(aoa)
-
-    // Немного ширины колонок для читаемости
-    ws['!cols'] = [
-      { wch: 20 }, // SKU
-      { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
-      { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 12 },
-    ]
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'SKUs')
-
-    const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
-    XLSX.writeFile(wb, `sku-profit-${stamp}.xlsx`)
-  }
 
   const handleStartEdit = (r: Row) => {
     setEditingId(r.id)
@@ -234,7 +205,6 @@ export default function Home() {
     setDraftFeePct(r.feePct.toString())
     setDraftLogistics(r.logistics.toString())
   }
-
   const handleCancelEdit = () => {
     setEditingId(null)
     setDraftSku('')
@@ -265,37 +235,40 @@ export default function Home() {
     handleCancelEdit()
   }
 
-  /** Превью метрик */
+  // превью
   const p = toNum(price)
   const c = toNum(cost)
   const f = clamp(toNum(feePct), 0, 100)
   const l = toNum(logistics)
 
-  const isInitialForm = [price, cost, feePct, logistics].every((v) => v.trim() === '')
+  const isInitialForm = [price, cost, feePct, logistics].every(
+    (v) => v.trim() === ''
+  )
 
   const revenuePreview = unitRevenue(p, 0)
   const profitPreview = p - c - unitFee(p, f, 0) - l
-  const marginPreview = revenuePreview > 0 ? (profitPreview / revenuePreview) * 100 : 0
+  const marginPreview =
+    revenuePreview > 0 ? (profitPreview / revenuePreview) * 100 : 0
 
   const previewProfitClass = isInitialForm
     ? 'text-gray-900 font-semibold'
     : profitPreview < 0
-      ? 'text-red-600 font-semibold'
-      : profitPreview > 0
-        ? 'text-green-600 font-semibold'
-        : 'text-gray-900 font-semibold'
+    ? 'text-red-600 font-semibold'
+    : profitPreview > 0
+    ? 'text-green-600 font-semibold'
+    : 'text-gray-900 font-semibold'
 
   const previewMarginClass = isInitialForm
     ? 'text-gray-900 font-semibold'
     : marginPreview < 0
-      ? 'text-red-600 font-semibold'
-      : marginPreview < 20
-        ? 'text-yellow-600 font-semibold'
-        : marginPreview > 0
-          ? 'text-green-600 font-semibold'
-          : 'text-gray-900 font-semibold'
+    ? 'text-red-600 font-semibold'
+    : marginPreview < 20
+    ? 'text-yellow-600 font-semibold'
+    : marginPreview > 0
+    ? 'text-green-600 font-semibold'
+    : 'text-gray-900 font-semibold'
 
-  /** Добавление/удаление */
+  // добавление/удаление
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -344,93 +317,52 @@ export default function Home() {
     handleCancelEdit()
   }
 
-  /** --- helper: логин/синхронизация локальных/серверных строк --- */
-  // --- helper: логин/синхронизация локальных/серверных строк ---
-  const hydrateRowsOnLogin = async () => {
-    const { data: { session }, error } = await supabase.auth.getSession()
-    if (error) {
-      console.error('getSession error:', error)
-    }
-
-    const isLoggedIn = !!session?.user
-    setAuthed(isLoggedIn)
-
-    if (!isLoggedIn) {
-      // гость → показываем локальные
-      const saved = loadRows<Row>()
-      setRows(saved)
-      return
-    }
-
-    // залогинен → тянем сервер
-    const { rows: dbRows } = await fetchRowsAction()
-    const serverRows = ((dbRows as DbRow[]) ?? []).map(dbToUi)
-
-    if (serverRows.length > 0) {
-      setRows(serverRows)
-      return
-    }
-
-    // если на сервере пусто — поднимаем локальные
-    const localRows = loadRows<Row>()
-    if (localRows.length > 0) {
-      await Promise.all(localRows.map((r) => upsertRowAction(uiToDb(r))))
-      const { rows: after } = await fetchRowsAction()
-      setRows(((after as DbRow[]) ?? []).map(dbToUi))
-    } else {
-      setRows([])
-    }
-  }
-
-
-  /** localStorage — начальная загрузка */
+  // localStorage
   useEffect(() => {
     const saved = loadRows<Row>()
     if (saved.length) setRows(saved)
   }, [])
+  useEffect(() => {
+    saveRows(rows)
+  }, [rows])
 
-  /** localStorage — сохраняем только в гостевом режиме */
+  useEffect(() => {
+    if (!importInfo) return
+    const t = setTimeout(() => setImportInfo(null), 6000) // 6 секунд
+    return () => clearTimeout(t)
+  }, [importInfo])
+
+  useEffect(() => {
+    async function init() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (user) {
+        setAuthed(true)
+        const { rows: dbRows } = await fetchRowsAction()
+        setRows((dbRows as DbRow[]).map(dbToUi))
+      } else {
+        const saved = loadRows<Row>()
+        if (saved.length) setRows(saved)
+      }
+    }
+    init()
+  }, [])
+
   useEffect(() => {
     if (!authed) saveRows(rows)
   }, [rows, authed])
 
-  /** Убираем импорт-уведомление через 6 секунд */
-  useEffect(() => {
-    if (!importInfo) return
-    const t = setTimeout(() => setImportInfo(null), 6000)
-    return () => clearTimeout(t)
-  }, [importInfo])
-
-  /** Инициализация: подтянуть данные в зависимости от авторизации */
-  useEffect(() => {
-    hydrateRowsOnLogin()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  /** Реакция на смену сессии: пересинхронизировать данные */
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      const isLoggedIn = !!session?.user
-      setAuthed(isLoggedIn)
-
-      if (isLoggedIn) {
-        // вошли → сразу тянем сервер
-        const { rows: dbRows } = await fetchRowsAction()
-        setRows(((dbRows as DbRow[]) ?? []).map(dbToUi))
-      } else {
-        // вышли → локальные
-        setRows(loadRows<Row>())
-      }
-    })
-
+    } = supabase.auth.onAuthStateChange((_event, session) =>
+      setAuthed(!!session)
+    )
     return () => subscription.unsubscribe()
   }, [])
 
-
-
-  /** Пересчёт метрик */
+  // пересчёт
   const computed = useMemo(() => {
     const withMetrics = rows.map((r) => {
       const rev = unitRevenue(r.price, 0)
@@ -452,7 +384,8 @@ export default function Home() {
       { rev: 0, fee: 0, direct: 0, profit: 0 }
     )
 
-    const totalMarginPct = totals.rev > 0 ? (totals.profit / totals.rev) * 100 : 0
+    const totalMarginPct =
+      totals.rev > 0 ? (totals.profit / totals.rev) * 100 : 0
     return { rows: withMetrics, totals, totalMarginPct }
   }, [rows])
 
@@ -460,12 +393,39 @@ export default function Home() {
     computed.totalMarginPct < 0
       ? 'text-red-700'
       : computed.totalMarginPct > 0
-        ? computed.totalMarginPct < 20
-          ? 'text-yellow-700'
-          : 'text-green-700'
-        : 'text-gray-800'
+      ? computed.totalMarginPct < 20
+        ? 'text-yellow-700'
+        : 'text-green-700'
+      : 'text-gray-800'
 
-  /** Импорт: парсер + отчёт */
+  // [ADD] при изменении общей маржи — пополняем серию для графика (без спама)
+  useEffect(() => {
+    // не пишем точку, если нет выручки
+    const rev = computed.totals.rev
+    if (!(rev > 0)) return
+
+    let margin = computed.totalMarginPct
+    if (!Number.isFinite(margin)) return
+    margin = Number(margin.toFixed(2)) // нормализуем
+
+    setMarginSeries((prev) => {
+      const now = Date.now()
+      const last = prev[prev.length - 1]
+
+      // защита от спама: если точка почти не изменилась или слишком часто
+      const tooClose = last && now - last.ts < 15_000 // < 15 сек
+      const same = last && Math.abs(last.margin - margin) < 0.05 // < 0.05%
+      if (tooClose || same) return prev
+
+      const next = [...prev.slice(-199), { ts: now, margin }] // не больше 200 точек
+      try {
+        localStorage.setItem('metrics:marginSeries', JSON.stringify(next))
+      } catch {}
+      return next
+    })
+  }, [computed.totalMarginPct, computed.totals.rev])
+
+  // импорт: парсер + отчёт
   const parseNum = (s: string) => {
     const cleaned = s.replace(/\s+/g, '').replace(/[₽%]/g, '').replace(',', '.')
     const n = Number(cleaned)
@@ -491,10 +451,18 @@ export default function Home() {
   }
 
   // маппим текст заголовка к каноническому ключу
-  function headerToKey(h: string): 'sku' | 'price' | 'cost' | 'feePct' | 'logistics' | null {
-    const s = h.toLowerCase().replace(/[₽\u20bd]/g, '').replace(/\s+/g, ' ').trim()
-
-    if (/(^|[^a-zа-я])sku([^a-zа-я]|$)|артикул|наимен|назв|товар|код|^id$/.test(s)) return 'sku'
+  function headerToKey(
+    h: string
+  ): 'sku' | 'price' | 'cost' | 'feePct' | 'logistics' | null {
+    const s = h
+      .toLowerCase()
+      .replace(/[₽\u20bd]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (
+      /(^|[^a-zа-я])sku([^a-zа-я]|$)|артикул|наимен|назв|товар|код|^id$/.test(s)
+    )
+      return 'sku'
     if (/^price$|цена|розниц|продаж/.test(s)) return 'price'
     if (/себестоим|закуп|^cost$/.test(s)) return 'cost'
     if (/комисси|fee|процент/.test(s)) return 'feePct'
@@ -522,24 +490,26 @@ export default function Home() {
 
     // Если заголовок «похож», требуем наличие всех обязательных колонок
     let startAt = 0
-    let idx: Record<'sku' | 'price' | 'cost' | 'feePct' | 'logistics', number> = {
-      sku: 0,
-      price: 1,
-      cost: 2,
-      feePct: 3,
-      logistics: 4,
-    }
+    let idx: Record<'sku' | 'price' | 'cost' | 'feePct' | 'logistics', number> =
+      {
+        sku: 0,
+        price: 1,
+        cost: 2,
+        feePct: 3,
+        logistics: 4,
+      }
 
     if (hasHeader) {
       startAt = 1
       const byKey: Partial<typeof idx> = {}
       guessedKeys.forEach((k, i) => {
-        if (k) (byKey as Record<keyof typeof idx, number>)[k as keyof typeof idx] = i
+        if (k)
+          (byKey as Record<keyof typeof idx, number>)[k as keyof typeof idx] = i
       })
 
-      const missing = (['sku', 'price', 'cost', 'feePct', 'logistics'] as const).filter(
-        (k) => byKey[k] === undefined
-      )
+      const missing = (
+        ['sku', 'price', 'cost', 'feePct', 'logistics'] as const
+      ).filter((k) => byKey[k] === undefined)
 
       if (missing.length > 0) {
         const need = ['sku', 'price', 'cost', 'feePct', 'logistics']
@@ -578,7 +548,7 @@ export default function Home() {
       if (cols.length < 5) {
         errors.push(
           `Строка ${i + 1}: ожидается 5 столбцов, найдено ${cols.length}. ` +
-          `Формат: ${DISPLAY.sku}${sep}${DISPLAY.price}${sep}${DISPLAY.cost}${sep}${DISPLAY.feePct}${sep}${DISPLAY.logistics}`
+            `Формат: ${DISPLAY.sku}${sep}${DISPLAY.price}${sep}${DISPLAY.cost}${sep}${DISPLAY.feePct}${sep}${DISPLAY.logistics}`
         )
         continue
       }
@@ -601,10 +571,14 @@ export default function Home() {
         continue
       }
 
-      const badNums = [price, cost, feePct, logistics].some((v) => Number.isNaN(v))
+      const badNums = [price, cost, feePct, logistics].some((v) =>
+        Number.isNaN(v)
+      )
       if (badNums) {
         errors.push(
-          `Строка ${i + 1}: проверьте числа (Цена/Себестоимость/Комиссия/Логистика).`
+          `Строка ${
+            i + 1
+          }: проверьте числа (Цена/Себестоимость/Комиссия/Логистика).`
         )
         continue
       }
@@ -622,14 +596,69 @@ export default function Home() {
     downloadCSV(csv, 'import-errors.csv')
   }
 
+  // [ADD] Данные для графика «Прибыль по SKU»
+  const profitBySku = (computed.rows as RowWithMetrics[]).map((r) => ({
+    sku: r.sku,
+    profit: Number(r.profit.toFixed(2)),
+  }))
+
+  // [ADD] Экспорт XLSX (учитывает чекбокс «с ед. изм.» на заголовках)
+  function exportXLSX(rowsWithM: RowWithMetrics[], withUnits: boolean) {
+    const headers = [
+      'SKU',
+      `Цена${withUnits ? ' ₽' : ''}`,
+      `Себестоимость${withUnits ? ' ₽' : ''}`,
+      `Комиссия${withUnits ? ' %' : ''}`,
+      `Логистика${withUnits ? ' ₽' : ''}`,
+      `Выручка${withUnits ? ' ₽' : ''}`,
+      `Комиссия${withUnits ? ' ₽' : ''}`,
+      `Прямые затраты${withUnits ? ' ₽' : ''}`,
+      `Прибыль/шт${withUnits ? ' ₽' : ''}`,
+      `Маржа${withUnits ? ' %' : ''}`,
+    ]
+
+    const data = rowsWithM.map((r) => [
+      r.sku,
+      r.price,
+      r.cost,
+      r.feePct,
+      r.logistics,
+      r.rev,
+      r.fee,
+      r.direct,
+      r.profit,
+      Number(r.marginPct.toFixed(2)),
+    ])
+
+    const aoa = [headers, ...data]
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    ws['!cols'] = [
+      { wch: 20 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 12 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'SKUs')
+    const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
+    XLSX.writeFile(wb, `sku-profit-${stamp}.xlsx`)
+  }
+
   return (
     <main className="flex min-h-screen items-start justify-center py-10 px-4 relative z-10">
-      <header className="flex items-center justify-between mb-4 relative z-40">
+      <header className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Калькулятор прибыли</h1>
         {authed ? (
           <LogoutButton
-            onAfterSignOut={async () => {
-              await hydrateRowsOnLogin() // ← покажем локальные строки после выхода
+            onAfterSignOut={() => {
+              setAuthed(false)
+              setRows(loadRows<Row>()) // сразу показать локальные данные (если есть)
               setImportInfo(null)
               handleCancelEdit()
             }}
@@ -703,7 +732,9 @@ export default function Home() {
         className={[
           'fixed inset-x-0 bottom-0 z-30',
           'transform transition-transform duration-500 ease-in-out will-change-[transform]',
-          sheetOpen ? 'translate-y-0 pointer-events-auto' : 'translate-y-full pointer-events-none',
+          sheetOpen
+            ? 'translate-y-0 pointer-events-auto'
+            : 'translate-y-full pointer-events-none',
         ].join(' ')}
       >
         <div className="mx-auto w-full max-w-[1400px] px-4">
@@ -743,7 +774,8 @@ export default function Home() {
 
                       try {
                         const text = await file.text()
-                        const { rows: parsed, errors } = parseBaseWithReport(text)
+                        const { rows: parsed, errors } =
+                          parseBaseWithReport(text)
 
                         if (parsed.length === 0) {
                           setImportInfo({
@@ -773,7 +805,6 @@ export default function Home() {
                           msg: 'Не удалось прочитать файл. Попробуйте снова.',
                         })
                       } finally {
-                        // Чистим именно сохранённый input, а не e.currentTarget (который уже может быть null)
                         inputEl.value = ''
                       }
                     }}
@@ -791,27 +822,34 @@ export default function Home() {
                     className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 focus:outline-none relative"
                   >
                     i
-                    <div
-                      className="absolute bottom-full mb-2 right-0 z-50 hidden group-hover:block w-[360px]
-                                 rounded-lg border border-gray-200 bg-white shadow-xl p-3 text-xs text-gray-700"
-                    >
+                    <div className="absolute bottom-full mb-2 right-0 z-50 hidden group-hover:block w-[360px] rounded-lg border border-gray-200 bg-white shadow-xl p-3 text-xs text-gray-700">
                       <p className="font-semibold mb-1">Как импортировать</p>
                       <div className="space-y-1">
                         <p>
                           Для импорта используйте только поля:&nbsp;
                           <br />
-                          <b>SKU, Цена, Себестоимость, Комиссия %, Логистика</b>.
+                          <b>SKU, Цена, Себестоимость, Комиссия %, Логистика</b>
+                          .
                           <br />
-                          Остальные показатели программа рассчитает автоматически.
+                          Остальные показатели программа рассчитает
+                          автоматически.
                         </p>
-                        <p className="mt-2">📌 Поддерживаются такие варианты:</p>
+                        <p className="mt-2">
+                          📌 Поддерживаются такие варианты:
+                        </p>
                         <p>
-                          – Разделители: <code>;</code> или <code>,</code>&nbsp;(пример:{' '}
-                          <code>SKU;100;50;10;20</code>)
+                          – Разделители: <code>;</code> или <code>,</code>
+                          &nbsp;(пример: <code>SKU;100;50;10;20</code>)
                         </p>
-                        <p>– Цены: <code>100</code> или <code>100,50 ₽</code></p>
-                        <p>– Комиссия: <code>10</code> или <code>10 %</code></p>
-                        <p>– Логистика: <code>20</code> или <code>20 ₽</code></p>
+                        <p>
+                          – Цены: <code>100</code> или <code>100,50 ₽</code>
+                        </p>
+                        <p>
+                          – Комиссия: <code>10</code> или <code>10 %</code>
+                        </p>
+                        <p>
+                          – Логистика: <code>20</code> или <code>20 ₽</code>
+                        </p>
                       </div>
                     </div>
                   </button>
@@ -830,17 +868,15 @@ export default function Home() {
                 </div>
 
                 {/* чекбокс единиц + экспорт */}
-                {
-                  rows.length > 0 && <label className="flex items-center gap-2 text-sm text-gray-700 ml-2">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4"
-                      checked={addUnits}
-                      onChange={(e) => setAddUnits(e.target.checked)}
-                    />
-                    с ед. изм.
-                  </label>
-                }
+                <label className="flex items-center gap-2 text-sm text-gray-700 ml-2">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={addUnits}
+                    onChange={(e) => setAddUnits(e.target.checked)}
+                  />
+                  с ед. изм.
+                </label>
 
                 {rows.length > 0 && (
                   <>
@@ -850,21 +886,27 @@ export default function Home() {
                           computed.rows as RowWithMetrics[],
                           addUnits
                         )
-                        const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19)
+                        const stamp = new Date()
+                          .toISOString()
+                          .replace(/[:T]/g, '-')
+                          .slice(0, 19)
                         downloadCSV(csv, `sku-profit-${stamp}.csv`)
                       }}
                       className="px-4 py-2 rounded-xl border border-indigo-300 text-indigo-700 bg-white/90 hover:bg-indigo-50 transition"
                     >
                       Экспорт CSV
                     </button>
+
+                    {/* [ADD] Экспорт XLSX */}
                     <button
-                      onClick={() => exportXLSX(computed.rows as RowWithMetrics[], addUnits)}
+                      onClick={() =>
+                        exportXLSX(computed.rows as RowWithMetrics[], addUnits)
+                      }
                       className="px-4 py-2 rounded-xl border border-indigo-300 text-indigo-700 bg-white/90 hover:bg-indigo-50 transition"
                     >
                       Экспорт XLSX
                     </button>
                   </>
-
                 )}
 
                 <button
@@ -886,9 +928,11 @@ export default function Home() {
                   'absolute top-3 right-3 z-50 max-w-[420px]',
                   'px-3 py-2 rounded-lg text-sm shadow-lg border',
                   importInfo.type === 'success' &&
-                  'bg-emerald-50 text-emerald-800 border-emerald-200',
-                  importInfo.type === 'warn' && 'bg-amber-50 text-amber-800 border-amber-200',
-                  importInfo.type === 'error' && 'bg-rose-50 text-rose-800 border-rose-200',
+                    'bg-emerald-50 text-emerald-800 border-emerald-200',
+                  importInfo.type === 'warn' &&
+                    'bg-amber-50 text-amber-800 border-amber-200',
+                  importInfo.type === 'error' &&
+                    'bg-rose-50 text-rose-800 border-rose-200',
                 ].join(' ')}
               >
                 <div className="flex items-start gap-2">
@@ -897,16 +941,19 @@ export default function Home() {
                       {importInfo.type === 'success'
                         ? 'Готово'
                         : importInfo.type === 'warn'
-                          ? 'Частично'
-                          : 'Ошибка'}
+                        ? 'Частично'
+                        : 'Ошибка'}
                     </span>
                     <span className="ml-2">{importInfo.msg}</span>
 
-                    {(importInfo.type === 'warn' || importInfo.type === 'error') &&
+                    {(importInfo.type === 'warn' ||
+                      importInfo.type === 'error') &&
                       importInfo.errors &&
                       importInfo.errors.length > 0 && (
                         <button
-                          onClick={() => downloadImportErrors(importInfo.errors!)}
+                          onClick={() =>
+                            downloadImportErrors(importInfo.errors!)
+                          }
                           className="ml-2 underline decoration-dotted hover:no-underline"
                         >
                           Отчёт
@@ -923,6 +970,18 @@ export default function Home() {
                 </div>
               </div>
             )}
+
+            {/* [ADD] мини-дашборд (перед таблицей) */}
+            <MiniDashboard
+              profitBySku={profitBySku}
+              marginSeries={marginSeries}
+              onClearMargin={() => {
+                setMarginSeries([])
+                try {
+                  localStorage.removeItem('metrics:marginSeries')
+                } catch {}
+              }}
+            />
 
             {/* таблица */}
             <div className="max-h-[55vh] overflow-auto overflow-x-auto">
