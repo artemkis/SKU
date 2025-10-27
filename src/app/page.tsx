@@ -151,6 +151,61 @@ type ImportInfo =
 // [ADD] тип для серии маржи (дашборд)
 type MarginPoint = { ts: number; margin: number }
 
+function FaqItem({
+  icon,
+  title,
+  children,
+}: {
+  icon: React.ReactNode
+  title: string
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-xl border border-pink-100 bg-white/70 backdrop-blur shadow-sm hover:shadow-md transition">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex justify-between items-center px-4 py-3 font-medium text-gray-800"
+      >
+        <div className="flex items-center gap-2">
+          <span className="w-5 h-5 inline-flex items-center justify-center">
+            {icon}
+          </span>
+          <span>{title}</span>
+        </div>
+        <span
+          className={`inline-flex h-5 w-5 items-center justify-center transform transition-transform duration-300 ${
+            open ? 'rotate-45' : ''
+          }`}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className="h-4 w-4 text-pink-400"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 5v14M5 12h14"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
+        </span>
+      </button>
+
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+          open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="px-4 pb-4 text-sm text-gray-600">{children}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Home() {
   // форма
   const [sku, setSku] = useState('')
@@ -322,9 +377,6 @@ export default function Home() {
     const saved = loadRows<Row>()
     if (saved.length) setRows(saved)
   }, [])
-  useEffect(() => {
-    saveRows(rows)
-  }, [rows])
 
   useEffect(() => {
     if (!importInfo) return
@@ -652,71 +704,107 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen items-start justify-center py-10 px-4 relative z-10">
-      <header className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Калькулятор прибыли</h1>
-        {authed ? (
-          <LogoutButton
-            onAfterSignOut={() => {
-              setAuthed(false)
-              setRows(loadRows<Row>()) // сразу показать локальные данные (если есть)
-              setImportInfo(null)
-              handleCancelEdit()
-            }}
-          />
-        ) : (
-          <Link href="/login" className="underline">
-            Войти
-          </Link>
-        )}
-      </header>
+      {/* ТРИ КОЛОНКИ: FAQ | Форма | Войти/Выйти */}
+      <div className="mx-auto max-w-[1200px] grid gap-10 items-start grid-cols-1 xl:grid-cols-[minmax(360px,0.9fr),minmax(560px,1.1fr),auto]">
+        {/* ===== ЛЕВАЯ КОЛОНКА (FAQ) ===== */}
+        <div className="hidden lg:flex flex-col space-y-3 text-gray-700">
+          <h2 className="text-2xl font-semibold bg-gradient-to-r from-fuchsia-600 to-sky-500 bg-clip-text text-transparent mb-2 text-center">
+            Частые вопросы
+          </h2>
 
-      <FormCard
-        onSubmit={handleSubmit}
-        fields={[
-          {
-            id: 'sku',
-            label: 'SKU (название товара)',
-            type: 'text',
-            value: sku,
-            set: setSku,
-          },
-          {
-            id: 'price',
-            label: 'Цена продажи, ₽',
-            type: 'number',
-            value: price,
-            set: setPrice,
-          },
-          {
-            id: 'cost',
-            label: 'Себестоимость, ₽',
-            type: 'number',
-            value: cost,
-            set: setCost,
-          },
-          {
-            id: 'feePct',
-            label: 'Комиссия площадки, %',
-            type: 'number',
-            value: feePct,
-            set: setFeePct,
-            min: 0,
-            max: 100,
-          },
-          {
-            id: 'logistics',
-            label: 'Логистика, ₽/шт',
-            type: 'number',
-            value: logistics,
-            set: setLogistics,
-          },
-        ]}
-        previewProfitClass={previewProfitClass}
-        profitPreview={profitPreview}
-        previewMarginClass={previewMarginClass}
-        marginPreview={marginPreview}
-        onOpenTable={() => setSheetOpen(true)}
-      />
+          <FaqItem icon="💸" title="Как считается прибыль?">
+            Прибыль = Выручка − Себестоимость − Комиссия − Логистика. Маржа =
+            (Прибыль ÷ Выручка) × 100%.
+          </FaqItem>
+
+          <FaqItem icon="🗂️" title="Где хранятся данные?">
+            Без входа — в localStorage браузера. После входа — синхронизируются
+            с вашим профилем в БД.
+          </FaqItem>
+
+          <FaqItem icon="📥" title="Как импортировать CSV?">
+            Нажмите «Импорт CSV» и выберите файл с колонками: SKU, Цена,
+            Себестоимость, Комиссия %, Логистика.
+          </FaqItem>
+
+          <FaqItem icon="📊" title="Можно экспортировать в Excel?">
+            Да, кнопка «Экспорт XLSX» сохранит таблицу с метриками в .xlsx.
+          </FaqItem>
+        </div>
+
+        {/* ===== СРЕДНЯЯ КОЛОНКА (ФОРМА) ===== */}
+        <div className="flex flex-col items-center justify-center text-center w-full max-w-[700px] mx-auto space-y-4 ">
+          <h1 className="text-2xl font-semibold bg-gradient-to-r from-fuchsia-600 to-sky-500 bg-clip-text text-transparent text-center mb-2">
+            Калькулятор прибыли
+          </h1>
+
+          <FormCard
+            onSubmit={handleSubmit}
+            fields={[
+              {
+                id: 'sku',
+                label: 'SKU (название товара)',
+                type: 'text',
+                value: sku,
+                set: setSku,
+              },
+              {
+                id: 'price',
+                label: 'Цена продажи, ₽',
+                type: 'number',
+                value: price,
+                set: setPrice,
+              },
+              {
+                id: 'cost',
+                label: 'Себестоимость, ₽',
+                type: 'number',
+                value: cost,
+                set: setCost,
+              },
+              {
+                id: 'feePct',
+                label: 'Комиссия площадки, %',
+                type: 'number',
+                value: feePct,
+                set: setFeePct,
+              },
+              {
+                id: 'logistics',
+                label: 'Логистика, ₽/шт',
+                type: 'number',
+                value: logistics,
+                set: setLogistics,
+              },
+            ]}
+            previewProfitClass={previewProfitClass}
+            profitPreview={profitPreview}
+            previewMarginClass={previewMarginClass}
+            marginPreview={marginPreview}
+            onOpenTable={() => setSheetOpen(true)}
+          />
+        </div>
+
+        {/* ===== ПРАВАЯ КОЛОНКА (ВОЙТИ / ВЫЙТИ) ===== */}
+        <div className="flex justify-center items-start pt-2">
+          {authed ? (
+            <LogoutButton
+              onAfterSignOut={() => {
+                setAuthed(false)
+                setRows(loadRows<Row>())
+                setImportInfo(null)
+              }}
+            />
+          ) : (
+            <Link
+              href="/login"
+              className="px-4 py-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-sky-500 text-white hover:opacity-90 transition"
+            >
+              Войти
+            </Link>
+          )}
+        </div>
+      </div>
 
       {sheetOpen && (
         <div
@@ -738,13 +826,13 @@ export default function Home() {
         ].join(' ')}
       >
         <div className="mx-auto w-full max-w-[1400px] px-4">
-          <div className="rounded-t-2xl border border-gray-200/70 bg-white/95 backdrop-blur shadow-2xl">
+          <div className="rounded-t-2xl border border-gray-200/70 bg-white/95 backdrop-blur shadow-2xl max-h-[85vh] flex flex-col overflow-hidden">
             <div className="flex justify-center pt-2">
               <div className="h-1.5 w-12 rounded-full bg-gray-300" />
             </div>
 
             {/* тулбар */}
-            <div className="flex items-center justify-between px-4 py-3">
+            <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-white/95 backdrop-blur border-b border-gray-200/60">
               <div className="text-sm text-gray-600">
                 Всего позиций:&nbsp;
                 <span className="font-semibold">{rows.length}</span>
@@ -819,10 +907,17 @@ export default function Home() {
 
                   <button
                     type="button"
-                    className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 focus:outline-none relative"
+                    className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 focus:outline-none relative group"
                   >
                     i
-                    <div className="absolute bottom-full mb-2 right-0 z-50 hidden group-hover:block w-[360px] rounded-lg border border-gray-200 bg-white shadow-xl p-3 text-xs text-gray-700">
+                    <div
+                      className="
+      absolute top-full mt-2 left-0 z-50 hidden group-hover:block
+      w-[360px] rounded-lg border border-gray-200 bg-white shadow-xl p-3 text-xs text-gray-700
+      transition ease-out duration-150
+      opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0
+    "
+                    >
                       <p className="font-semibold mb-1">Как импортировать</p>
                       <div className="space-y-1">
                         <p>
@@ -838,8 +933,8 @@ export default function Home() {
                           📌 Поддерживаются такие варианты:
                         </p>
                         <p>
-                          – Разделители: <code>;</code> или <code>,</code>
-                          &nbsp;(пример: <code>SKU;100;50;10;20</code>)
+                          – Разделители: <code>;</code> или <code>,</code>{' '}
+                          (пример: <code>SKU;100;50;10;20</code>)
                         </p>
                         <p>
                           – Цены: <code>100</code> или <code>100,50 ₽</code>
@@ -972,40 +1067,42 @@ export default function Home() {
             )}
 
             {/* [ADD] мини-дашборд (перед таблицей) */}
-            <MiniDashboard
-              profitBySku={profitBySku}
-              marginSeries={marginSeries}
-              onClearMargin={() => {
-                setMarginSeries([])
-                try {
-                  localStorage.removeItem('metrics:marginSeries')
-                } catch {}
-              }}
-            />
-
-            {/* таблица */}
-            <div className="max-h-[55vh] overflow-auto overflow-x-auto">
-              <DataTable
-                headerColumns={headerColumns}
-                SKU_COL_W={SKU_COL_W}
-                computed={computed}
-                editingId={editingId}
-                draftSku={draftSku}
-                draftPrice={draftPrice}
-                draftCost={draftCost}
-                draftFeePct={draftFeePct}
-                draftLogistics={draftLogistics}
-                setDraftSku={setDraftSku}
-                setDraftPrice={setDraftPrice}
-                setDraftCost={setDraftCost}
-                setDraftFeePct={setDraftFeePct}
-                setDraftLogistics={setDraftLogistics}
-                handleStartEdit={handleStartEdit}
-                handleSaveEdit={handleSaveEdit}
-                handleCancelEdit={handleCancelEdit}
-                handleRemove={handleRemove}
-                totalMarginClass={totalMarginClass}
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <MiniDashboard
+                profitBySku={profitBySku}
+                marginSeries={marginSeries}
+                onClearMargin={() => {
+                  setMarginSeries([])
+                  try {
+                    localStorage.removeItem('metrics:marginSeries')
+                  } catch {}
+                }}
               />
+
+              {/* таблица */}
+              <div className="overflow-x-auto">
+                <DataTable
+                  headerColumns={headerColumns}
+                  SKU_COL_W={SKU_COL_W}
+                  computed={computed}
+                  editingId={editingId}
+                  draftSku={draftSku}
+                  draftPrice={draftPrice}
+                  draftCost={draftCost}
+                  draftFeePct={draftFeePct}
+                  draftLogistics={draftLogistics}
+                  setDraftSku={setDraftSku}
+                  setDraftPrice={setDraftPrice}
+                  setDraftCost={setDraftCost}
+                  setDraftFeePct={setDraftFeePct}
+                  setDraftLogistics={setDraftLogistics}
+                  handleStartEdit={handleStartEdit}
+                  handleSaveEdit={handleSaveEdit}
+                  handleCancelEdit={handleCancelEdit}
+                  handleRemove={handleRemove}
+                  totalMarginClass={totalMarginClass}
+                />
+              </div>
             </div>
           </div>
         </div>
