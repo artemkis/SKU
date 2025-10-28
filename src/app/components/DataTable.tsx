@@ -1,7 +1,7 @@
 'use client'
 
 import Tooltip from './Tooltip'
-import { fmt, fmtRub } from '../../lib/helpers'
+import { fmtPct, fmtMoney } from '../../lib/helpers'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Pencil, Trash2, Check, X } from 'lucide-react'
 
@@ -213,7 +213,7 @@ export default function DataTable({
                         className="w-32 rounded-lg border border-gray-300 bg-white px-2 py-1 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300"
                       />
                     ) : (
-                      fmtRub(r.price)
+                      fmtMoney(r.price)
                     )}
                   </td>
 
@@ -229,7 +229,7 @@ export default function DataTable({
                         className="w-32 rounded-lg border border-gray-300 bg-white px-2 py-1 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300"
                       />
                     ) : (
-                      fmtRub(r.cost)
+                      fmtMoney(r.cost)
                     )}
                   </td>
 
@@ -251,7 +251,7 @@ export default function DataTable({
                       </div>
                     ) : (
                       <>
-                        {fmt(r.feePct, 2)}
+                        {fmtPct(r.feePct)}
                         {'\u00A0'}%
                       </>
                     )}
@@ -269,21 +269,21 @@ export default function DataTable({
                         className="w-32 rounded-lg border border-gray-300 bg-white px-2 py-1 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300"
                       />
                     ) : (
-                      fmtRub(r.logistics)
+                      fmtMoney(r.logistics)
                     )}
                   </td>
 
                   {/* Выручка, ₽ */}
                   <td className="px-4 py-3 whitespace-nowrap">
-                    {fmtRub(r.rev)}
+                    {fmtMoney(r.rev)}
                   </td>
                   {/* Комиссия, ₽ */}
                   <td className="px-4 py-3 whitespace-nowrap">
-                    {fmtRub(r.fee)}
+                    {fmtMoney(r.fee)}
                   </td>
                   {/* Прямые затраты, ₽ */}
                   <td className="px-4 py-3 whitespace-nowrap">
-                    {fmtRub(r.direct)}
+                    {fmtMoney(r.direct)}
                   </td>
 
                   {/* Прибыль, ₽ */}
@@ -296,7 +296,7 @@ export default function DataTable({
                         : 'text-gray-800'
                     }`}
                   >
-                    {fmtRub(r.profit)}
+                    {fmtMoney(r.profit)}
                   </td>
 
                   {/* Маржа, % */}
@@ -311,7 +311,7 @@ export default function DataTable({
                         : 'text-gray-800'
                     }`}
                   >
-                    {fmt(r.marginPct)}
+                    {fmtPct(r.marginPct)}
                     {'\u00A0'}%
                   </td>
 
@@ -408,15 +408,15 @@ export default function DataTable({
 
           {/* Выручка, ₽ */}
           <td className="px-4 py-3 font-bold whitespace-nowrap">
-            {fmtRub(computed.totals.rev)}
+            {fmtMoney(computed.totals.rev)}
           </td>
           {/* Комиссия, ₽ */}
           <td className="px-4 py-3 font-bold whitespace-nowrap">
-            {fmtRub(computed.totals.fee)}
+            {fmtMoney(computed.totals.fee)}
           </td>
           {/* Прямые затраты, ₽ */}
           <td className="px-4 py-3 font-bold whitespace-nowrap">
-            {fmtRub(computed.totals.direct)}
+            {fmtMoney(computed.totals.direct)}
           </td>
 
           {/* Прибыль, ₽ */}
@@ -430,14 +430,14 @@ export default function DataTable({
                 : 'text-gray-800',
             ].join(' ')}
           >
-            {fmtRub(computed.totals.profit)}
+            {fmtMoney(computed.totals.profit)}
           </td>
 
           {/* Общая маржа, % */}
           <td
             className={`px-4 py-3 font-bold whitespace-nowrap ${totalMarginClass}`}
           >
-            {fmt(computed.totalMarginPct)}
+            {fmtPct(computed.totalMarginPct)}
             {'\u00A0'}%
           </td>
 

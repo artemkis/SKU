@@ -13,7 +13,7 @@ import {
   LineChart,
   Line,
 } from 'recharts'
-import { fmt, fmtRub } from '../../lib/helpers'
+import { fmtPct, fmtMoney } from '../../lib/helpers'
 
 type ProfitBySkuItem = { sku: string; profit: number }
 type MarginPoint = { ts: number; margin: number }
@@ -36,8 +36,8 @@ const MiniDashboard: React.FC<Props> = ({
   }, [])
 
   // 2) форматтеры и хелперы (обычные функции, не хуки)
-  const rubTick = (v: number) => fmtRub(v)
-  const pctTick = (v: number) => `${fmt(v)}%`
+  const rubTick = (v: number) => fmtMoney(v)
+  const pctTick = (v: number) => `${fmtPct(v)}%`
   const shortSku = (s: string) => (s.length > 12 ? s.slice(0, 11) + '…' : s)
 
   // 3) useMemo — ВСЕГДА вызываются (безусловно), чтобы не ломать порядок хуков
@@ -85,9 +85,9 @@ const MiniDashboard: React.FC<Props> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* === Прибыль по SKU === */}
         <div className="flex-1 min-w-[300px] max-w-[600px] bg-white/90 border border-gray-200 rounded-xl shadow p-4">
-          <h3 className="text-sm font-semibold mb-1">Прибыль по SKU</h3>
+          <h3 className="text-sm font-semibold mb-1">Прибыль по товарам</h3>
           <p className="text-xs text-gray-500 mb-2">
-            Суммарная прибыль/шт по текущим данным
+            Сколько приносит каждая позиция
           </p>
 
           <div className="h-[220px]">
@@ -112,7 +112,7 @@ const MiniDashboard: React.FC<Props> = ({
         {/* === Общая маржа во времени === */}
         <div className="flex-1 min-w-[300px] max-w-[600px] bg-white/90 border border-gray-200 rounded-xl shadow p-4">
           <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm font-semibold">Общая маржа во времени</h3>
+            <h3 className="text-sm font-semibold">История маржи (динамика во времени)</h3>
             {onClearMargin && dataMargin.length > 0 && (
               <button
                 onClick={onClearMargin}
@@ -123,7 +123,7 @@ const MiniDashboard: React.FC<Props> = ({
             )}
           </div>
           <p className="text-xs text-gray-500 mb-2">
-            Снапшоты маржи портфеля при изменениях
+            Отслеживайте, как менялась средняя маржа при добавлении или редактировании товаров
           </p>
 
           <div className="h-[220px]">
@@ -136,11 +136,11 @@ const MiniDashboard: React.FC<Props> = ({
                 <XAxis dataKey="time" />
                 <YAxis tickFormatter={pctTick} />
                 <RTooltip
-                  formatter={(value: any, name) => [
-                    `${fmt(Number(value))}%`,
+                  formatter={(value: number, name) => [
+                    `${fmtPct(Number(value))}%`,
                     name === 'margin' ? 'Маржа, %' : name,
                   ]}
-                  labelFormatter={(label) => `Время: ${label}`}
+                  labelFormatter={(label: string) => `Время: ${label}`}
                 />
                 <Legend />
                 <Line

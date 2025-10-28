@@ -75,7 +75,7 @@ const fmtPct = (n: number) =>
 export function rowsWithMetricsToCSV(rows: RowWithMetrics[], addUnits = false): string {
   // Заголовки
   const headers = [
-  "SKU",
+  "Товар",
   "Цена (₽)",
   "Себестоимость (₽)",
   "Комиссия (%)",

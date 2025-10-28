@@ -62,9 +62,9 @@ const headerColumns: Array<{
 }> = [
   {
     key: 'sku',
-    label: 'SKU',
+    label: 'Товар',
     width: 'w-[12%]',
-    tooltip: { text: 'Уникальный идентификатор товара (артикул).' },
+    tooltip: { text: 'Название товара или артикул (SKU).' },
   },
   {
     key: 'price',
@@ -215,6 +215,12 @@ export default function Home() {
   const [logistics, setLogistics] = useState('')
   const [authed, setAuthed] = useState(false)
 
+  // [NEW] состояния ошибок для полей формы
+  const [errPrice, setErrPrice] = useState<string | null>(null)
+  const [errCost, setErrCost] = useState<string | null>(null)
+  const [errFeePct, setErrFeePct] = useState<string | null>(null)
+  const [errLogistics, setErrLogistics] = useState<string | null>(null)
+
   // данные/шторка
   const [rows, setRows] = useState<Row[]>([])
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -293,8 +299,37 @@ export default function Home() {
   // превью
   const p = toNum(price)
   const c = toNum(cost)
-  const f = clamp(toNum(feePct), 0, 100)
+  const fRaw = toNum(feePct) // сырой ввод комиссии
+  const f = clamp(fRaw, 0, 100) // нормализованное значение для расчётов
   const l = toNum(logistics)
+
+  // [NEW] функция валидации — сбрасывает ошибки и выставляет новые
+  function validateForm() {
+    let ok = true
+    setErrPrice(null)
+    setErrCost(null)
+    setErrFeePct(null)
+    setErrLogistics(null)
+
+    if (p < 0) {
+      setErrPrice('Цена не может быть отрицательной')
+      ok = false
+    }
+    if (c < 0) {
+      setErrCost('Себестоимость не может быть отрицательной')
+      ok = false
+    }
+    if (l < 0) {
+      setErrLogistics('Логистика не может быть отрицательной')
+      ok = false
+    }
+    if (!(fRaw >= 0 && fRaw <= 100)) {
+       setErrFeePct('Комиссия должна быть от 0 до 100%')
+       ok = false
+     }
+
+    return ok
+  }
 
   const isInitialForm = [price, cost, feePct, logistics].every(
     (v) => v.trim() === ''
@@ -326,6 +361,9 @@ export default function Home() {
   // добавление/удаление
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // [NEW] в начале сабмита — проверяем корректность данных
+    if (!validateForm()) return
 
     const newRow: Row = {
       id: makeId(),
@@ -485,7 +523,7 @@ export default function Home() {
   }
 
   const DISPLAY: Record<string, string> = {
-    sku: 'SKU',
+    sku: 'Товар',
     price: 'Цена',
     cost: 'Себестоимость',
     feePct: 'Комиссия %',
@@ -657,7 +695,7 @@ export default function Home() {
   // [ADD] Экспорт XLSX (учитывает чекбокс «с ед. изм.» на заголовках)
   function exportXLSX(rowsWithM: RowWithMetrics[], withUnits: boolean) {
     const headers = [
-      'SKU',
+      'Товар',
       `Цена${withUnits ? ' ₽' : ''}`,
       `Себестоимость${withUnits ? ' ₽' : ''}`,
       `Комиссия${withUnits ? ' %' : ''}`,
@@ -733,17 +771,24 @@ export default function Home() {
         </div>
 
         {/* ===== СРЕДНЯЯ КОЛОНКА (ФОРМА) ===== */}
-        <div className="flex flex-col items-center justify-center text-center w-full max-w-[700px] mx-auto space-y-4 ">
-          <h1 className="text-2xl font-semibold bg-gradient-to-r from-fuchsia-600 to-sky-500 bg-clip-text text-transparent text-center mb-2">
+        <div className="flex flex-col items-center justify-center  w-full max-w-[700px] mx-auto space-y-4 ">
+          <h1 className="text-2xl font-semibold bg-gradient-to-r from-fuchsia-600 to-sky-500 bg-clip-text text-transparent text-center mb-1">
             Калькулятор прибыли
           </h1>
 
           <FormCard
             onSubmit={handleSubmit}
+            // [NEW] прокидываем ошибки в форму
+            errors={{
+              price: errPrice,
+              cost: errCost,
+              feePct: errFeePct,
+              logistics: errLogistics,
+            }}
             fields={[
               {
                 id: 'sku',
-                label: 'SKU (название товара)',
+                label: 'Товар (название или артикул)',
                 type: 'text',
                 value: sku,
                 set: setSku,
@@ -768,6 +813,8 @@ export default function Home() {
                 type: 'number',
                 value: feePct,
                 set: setFeePct,
+                min: 0,
+                max: 100,
               },
               {
                 id: 'logistics',
@@ -913,7 +960,7 @@ export default function Home() {
                     <div
                       className="
       absolute top-full mt-2 left-0 z-50 hidden group-hover:block
-      w-[360px] rounded-lg border border-gray-200 bg-white shadow-xl p-3 text-xs text-gray-700
+      w-[360px] rounded-lg border border-gray-200 bg-white shadow-xl p-3 text-xs text-gray-700 text-left
       transition ease-out duration-150
       opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0
     "
@@ -923,7 +970,7 @@ export default function Home() {
                         <p>
                           Для импорта используйте только поля:&nbsp;
                           <br />
-                          <b>SKU, Цена, Себестоимость, Комиссия %, Логистика</b>
+                          <b>Товар, Цена, Себестоимость, Комиссия %, Логистика</b>
                           .
                           <br />
                           Остальные показатели программа рассчитает
@@ -934,7 +981,7 @@ export default function Home() {
                         </p>
                         <p>
                           – Разделители: <code>;</code> или <code>,</code>{' '}
-                          (пример: <code>SKU;100;50;10;20</code>)
+                          (пример: <code>Товар;100;50;10;20</code>)
                         </p>
                         <p>
                           – Цены: <code>100</code> или <code>100,50 ₽</code>
@@ -952,7 +999,7 @@ export default function Home() {
                   <button
                     onClick={() => {
                       const tpl =
-                        '\uFEFFSKU;Цена;Себестоимость;Комиссия %;Логистика\n' +
+                        '\uFEFFТовар;Цена;Себестоимость;Комиссия %;Логистика\n' +
                         'пример;100;50;10;20\n'
                       downloadCSV(tpl, 'sku-template.csv')
                     }}
@@ -963,7 +1010,8 @@ export default function Home() {
                 </div>
 
                 {/* чекбокс единиц + экспорт */}
-                <label className="flex items-center gap-2 text-sm text-gray-700 ml-2">
+               { rows.length > 0 &&
+               <><label className="flex items-center gap-2 text-sm text-gray-700 ml-2">
                   <input
                     type="checkbox"
                     className="h-4 w-4"
@@ -972,7 +1020,8 @@ export default function Home() {
                   />
                   с ед. изм.
                 </label>
-
+                </>
+                }
                 {rows.length > 0 && (
                   <>
                     <button

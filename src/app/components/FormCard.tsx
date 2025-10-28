@@ -1,11 +1,12 @@
 'use client'
 
 import { Field } from '../../lib/types'
-import { fmt, fmtRub } from '../../lib/helpers'
+import { fmtPct, fmtMoney } from '../../lib/helpers'
 
 export default function FormCard({
   fields,
   onSubmit,
+  errors,
   profitPreview,
   marginPreview,
   previewProfitClass,
@@ -14,6 +15,12 @@ export default function FormCard({
 }: {
   fields: Field[]
   onSubmit: (e: React.FormEvent<Element>) => void
+  errors?: {
+    price?: string | null
+    cost?: string | null
+    feePct?: string | null
+    logistics?: string | null
+  }
   profitPreview: number
   marginPreview: number
   previewProfitClass: string
@@ -35,43 +42,70 @@ export default function FormCard({
         </p>
       </div>
 
-      {fields.map((field) => (
-        <div className="relative" key={field.id}>
-          <input
-            id={field.id}
-            type={field.type}
-            value={field.value}
-            min={field.min}
-            max={field.max}
-            onChange={(e) => field.set(e.target.value)}
-            onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
-            inputMode={field.type === 'number' ? 'decimal' : undefined}
-            step={field.type === 'number' ? '0.01' : undefined}
-            data-filled={field.value ? 'true' : 'false'}
-            className="peer w-full h-12 rounded-xl border border-gray-300 bg-white/85 px-3 pt-5 pb-2 shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300 placeholder-transparent transition"
-            required
-          />
-          <label
-            htmlFor={field.id}
-            className="pointer-events-none absolute left-3 px-1 rounded text-gray-500 transition-all
-                       top-1/2 -translate-y-1/2 text-base bg-transparent
-                       peer-focus:top-2.5 peer-focus:text-xs peer-focus:bg-white/85 peer-focus:text-indigo-600
-                       peer-data-[filled=true]:top-2.5 peer-data-[filled=true]:text-xs peer-data-[filled=true]:bg-white/85"
-          >
-            {field.label}
-          </label>
-        </div>
-      ))}
+      {fields.map((field) => {
+        // [NEW] вычисляем текст ошибки для конкретного поля
+        const errorMsg =
+          (field.id === 'price' && errors?.price) ||
+          (field.id === 'cost' && errors?.cost) ||
+          (field.id === 'feePct' && errors?.feePct) ||
+          (field.id === 'logistics' && errors?.logistics) ||
+          null
+        const hasError = Boolean(errorMsg)
+
+        return (
+          <div className="relative" key={field.id}>
+            <input
+              id={field.id}
+              type={field.type}
+              value={field.value}
+              min={field.min}
+              max={field.max}
+              onChange={(e) => field.set(e.target.value)}
+              onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
+              inputMode={field.type === 'number' ? 'decimal' : undefined}
+              step={field.type === 'number' ? '0.01' : undefined}
+              data-filled={field.value ? 'true' : 'false'}
+              aria-invalid={hasError || undefined}
+              aria-describedby={hasError ? `${field.id}-error` : undefined}
+              className={[
+                'peer w-full h-12 rounded-xl border bg-white/85 px-3 pt-5 pb-2 shadow-sm outline-none placeholder-transparent transition',
+                hasError
+                  ? 'border-rose-400 focus:border-rose-400 focus:ring-2 focus:ring-rose-300'
+                  : 'border-gray-300 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300',
+              ].join(' ')}
+              required
+            />{' '}
+            <label
+              htmlFor={field.id}
+              className="pointer-events-none absolute left-3 px-1 rounded text-gray-500 transition-all                         top-1/2 -translate-y-1/2 text-base bg-transparent                         peer-focus:top-2.5 peer-focus:text-xs peer-focus:bg-white/85 peer-focus:text-indigo-600                         peer-data-[filled=true]:top-2.5 peer-data-[filled=true]:text-xs peer-data-[filled=true]:bg-white/85"
+            >
+              {field.label}
+            </label>
+            {/* [NEW] подпись с ошибкой под конкретным инпутом */}
+            {hasError && (
+              <p
+                id={`${field.id}-error`}
+                className="mt-1 text-xs text-rose-600"
+              >
+                {errorMsg}
+              </p>
+            )}
+          </div>
+        )
+      })}
 
       <div className="mt-2 rounded-xl border border-indigo-100 bg-indigo-50/70 text-indigo-900 text-sm p-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="text-center grow">
             Прибыль с 1 шт:{' '}
-            <span className={previewProfitClass}>{fmtRub(profitPreview)}</span>
+            <span className={previewProfitClass}>
+              {fmtMoney(profitPreview)}
+            </span>
           </div>
           <div className="text-center grow">
             Маржа:{' '}
-            <span className={previewMarginClass}>{fmt(marginPreview)} </span>%
+            <span className={previewMarginClass}>{fmtPct(marginPreview)} </span>
+            %
           </div>
         </div>
       </div>
