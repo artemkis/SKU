@@ -2,6 +2,7 @@
 
 import { Field } from '../../lib/types'
 import { fmtPct, fmtMoney } from '../../lib/helpers'
+import Spinner from './ui/Spinner'
 
 export default function FormCard({
   fields,
@@ -12,6 +13,7 @@ export default function FormCard({
   previewProfitClass,
   previewMarginClass,
   onOpenTable,
+  busyAdd,
 }: {
   fields: Field[]
   onSubmit: (e: React.FormEvent<Element>) => void
@@ -26,6 +28,7 @@ export default function FormCard({
   previewProfitClass: string
   previewMarginClass: string
   onOpenTable: () => void
+  busyAdd: boolean
 }) {
   return (
     <form
@@ -113,9 +116,16 @@ export default function FormCard({
       <div className="mt-3 grid grid-cols-2 gap-3">
         <button
           type="submit"
-          className="h-11 w-full rounded-xl font-semibold text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-[length:200%_200%] animate-[gradient-x_6s_ease_infinite] transition-transform duration-300 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2"
+          disabled={busyAdd}
+          className="h-11 w-full rounded-xl font-semibold text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-[length:200%_200%] animate-[gradient-x_6s_ease_infinite] transition-transform duration-300 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Добавить
+          {busyAdd ? (
+            <>
+              <Spinner /> Добавляю…
+            </>
+          ) : (
+            'Добавить'
+          )}
         </button>
 
         <button

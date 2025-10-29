@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
+import Spinner from './components/ui/Spinner'
 import { toNum, clamp, unitRevenue, unitFee, makeId } from '../lib/helpers'
 import type { Row, RowWithMetrics } from '../lib/types'
 import { loadRows, saveRows } from '../lib/storage'
@@ -239,6 +240,39 @@ export default function Home() {
   const [draftFeePct, setDraftFeePct] = useState('')
   const [draftLogistics, setDraftLogistics] = useState('')
 
+  // busy flags
+  const [busyAdd, setBusyAdd] = useState(false)
+  const [busyExport, setBusyExport] = useState(false)
+  const [busyImport, setBusyImport] = useState(false)
+  const [busyClear, setBusyClear] = useState(false)
+  const [busyTemplate, setBusyTemplate] = useState(false)
+
+  // toast
+  const [toast, setToast] = useState<string | null>(null)
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 3000)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  // утилита "поспать"
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+  async function withBusy(
+    setBusy: (v: boolean) => void,
+    fn: () => Promise<void> | void,
+    minMs = 200
+  ) {
+    setBusy(true)
+    const started = Date.now()
+    try {
+      await Promise.resolve(fn())
+    } finally {
+      const remain = Math.max(0, minMs - (Date.now() - started))
+      if (remain) await sleep(remain)
+      setBusy(false)
+    }
+  }
+
   // [ADD] История «Общей маржи во времени» (дашборд), хранение в localStorage
   const [marginSeries, setMarginSeries] = useState<MarginPoint[]>(() => {
     try {
@@ -324,9 +358,9 @@ export default function Home() {
       ok = false
     }
     if (!(fRaw >= 0 && fRaw <= 100)) {
-       setErrFeePct('Комиссия должна быть от 0 до 100%')
-       ok = false
-     }
+      setErrFeePct('Комиссия должна быть от 0 до 100%')
+      ok = false
+    }
 
     return ok
   }
@@ -361,33 +395,50 @@ export default function Home() {
   // добавление/удаление
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    // [NEW] в начале сабмита — проверяем корректность данных
     if (!validateForm()) return
+    setBusyAdd(true)
+    let startedAt = 0
+    try {
+      // фикс: даём React перерендериться и показать disabled/текст
+      // даже если дальше код синхронный (локальная ветка без await)
+      await sleep(0)
+      startedAt = Date.now()
 
-    const newRow: Row = {
-      id: makeId(),
-      sku: sku.trim() || `SKU-${rows.length + 1}`,
-      price: p,
-      cost: c,
-      feePct: f, // ← как и раньше в UI
-      logistics: l,
+      const newRow: Row = {
+        id: makeId(),
+        sku: sku.trim() || `SKU-${rows.length + 1}`,
+        price: p,
+        cost: c,
+        feePct: f,
+        logistics: l,
+      }
+      if (authed) {
+        await upsertRowAction(uiToDb(newRow))
+        const { rows: dbRows } = await fetchRowsAction()
+        setRows((dbRows as DbRow[]).map(dbToUi))
+      } else {
+        setRows((prev) => [newRow, ...prev])
+      }
+      setSku('')
+      setPrice('')
+      setCost('')
+      setFeePct('')
+      setLogistics('')
+      if (!sheetOpen) {
+        setTimeout(() => setSheetOpen(true), 300) // 200–300 мс — оптимально
+      }
+    } catch {
+      setToast('Не удалось выполнить действие')
+    } finally {
+      // гарантируем видимость индикатора хотя бы 200 мс
+      const minShow = 300
+      // проще и надёжнее: пересчёт от момента старта
+      // (если startedAt недоступен выше из-за рефакторинга, оставь sleep(0))
+      // но у нас есть startedAt — используем его:
+      const rem = Math.max(0, minShow - (Date.now() - startedAt))
+      if (rem) await sleep(rem)
+      setBusyAdd(false)
     }
-
-    if (authed) {
-      await upsertRowAction(uiToDb(newRow)) // ← маппим при отправке в БД
-      const { rows: dbRows } = await fetchRowsAction()
-      setRows((dbRows as DbRow[]).map(dbToUi)) // ← маппим обратно
-    } else {
-      setRows((prev) => [newRow, ...prev])
-    }
-
-    if (!sheetOpen) setSheetOpen(true)
-    setSku('')
-    setPrice('')
-    setCost('')
-    setFeePct('')
-    setLogistics('')
   }
 
   const handleRemove = async (id: string) => {
@@ -402,12 +453,19 @@ export default function Home() {
   }
 
   const handleClearAll = async () => {
-    if (authed) {
-      await clearAllRowsAction()
+    // 👇 даём React шанс показать спиннер
+    await sleep(0)
+
+    try {
+      if (authed) {
+        await clearAllRowsAction()
+      }
+      setRows([])
+      setImportInfo(null)
+      handleCancelEdit()
+    } catch {
+      setToast('Не удалось выполнить действие')
     }
-    setRows([])
-    setImportInfo(null)
-    handleCancelEdit()
   }
 
   // localStorage
@@ -431,6 +489,7 @@ export default function Home() {
         setAuthed(true)
         const { rows: dbRows } = await fetchRowsAction()
         setRows((dbRows as DbRow[]).map(dbToUi))
+        setToast('Данные синхронизированы')
       } else {
         const saved = loadRows<Row>()
         if (saved.length) setRows(saved)
@@ -741,421 +800,514 @@ export default function Home() {
   }
 
   return (
-    <main className="flex min-h-screen items-start justify-center py-10 px-4 relative z-10">
-      {/* ТРИ КОЛОНКИ: FAQ | Форма | Войти/Выйти */}
-      <div className="mx-auto max-w-[1200px] grid gap-10 items-start grid-cols-1 xl:grid-cols-[minmax(360px,0.9fr),minmax(560px,1.1fr),auto]">
-        {/* ===== ЛЕВАЯ КОЛОНКА (FAQ) ===== */}
-        <div className="hidden lg:flex flex-col space-y-3 text-gray-700">
-          <h2 className="text-2xl font-semibold bg-gradient-to-r from-fuchsia-600 to-sky-500 bg-clip-text text-transparent mb-2 text-center">
-            Частые вопросы
-          </h2>
+    <>
+      <main className="flex min-h-screen items-start justify-center py-10 px-4 relative z-10">
+        {/* ТРИ КОЛОНКИ: FAQ | Форма | Войти/Выйти */}
+        <div className="mx-auto max-w-[1200px] grid gap-10 items-start grid-cols-1 xl:grid-cols-[minmax(360px,0.9fr),minmax(560px,1.1fr),auto]">
+          {/* ===== ЛЕВАЯ КОЛОНКА (FAQ) ===== */}
+          <div className="hidden lg:flex flex-col space-y-3 text-gray-700">
+            <h2 className="text-2xl font-semibold bg-gradient-to-r from-fuchsia-600 to-sky-500 bg-clip-text text-transparent mb-2 text-center">
+              Частые вопросы
+            </h2>
 
-          <FaqItem icon="💸" title="Как считается прибыль?">
-            Прибыль = Выручка − Себестоимость − Комиссия − Логистика. Маржа =
-            (Прибыль ÷ Выручка) × 100%.
-          </FaqItem>
+            <FaqItem icon="💸" title="Как считается прибыль?">
+              Прибыль = Выручка − Себестоимость − Комиссия − Логистика. Маржа =
+              (Прибыль ÷ Выручка) × 100%.
+            </FaqItem>
 
-          <FaqItem icon="🗂️" title="Где хранятся данные?">
-            Без входа — в localStorage браузера. После входа — синхронизируются
-            с вашим профилем в БД.
-          </FaqItem>
+            <FaqItem icon="🗂️" title="Где хранятся данные?">
+              Без входа — в localStorage браузера. После входа —
+              синхронизируются с вашим профилем в БД.
+            </FaqItem>
 
-          <FaqItem icon="📥" title="Как импортировать CSV?">
-            Нажмите «Импорт CSV» и выберите файл с колонками: SKU, Цена,
-            Себестоимость, Комиссия %, Логистика.
-          </FaqItem>
+            <FaqItem icon="📥" title="Как импортировать CSV?">
+              Нажмите «Импорт CSV» и выберите файл с колонками: SKU, Цена,
+              Себестоимость, Комиссия %, Логистика.
+            </FaqItem>
 
-          <FaqItem icon="📊" title="Можно экспортировать в Excel?">
-            Да, кнопка «Экспорт XLSX» сохранит таблицу с метриками в .xlsx.
-          </FaqItem>
-        </div>
+            <FaqItem icon="📊" title="Можно экспортировать в Excel?">
+              Да, кнопка «Экспорт XLSX» сохранит таблицу с метриками в .xlsx.
+            </FaqItem>
+          </div>
 
-        {/* ===== СРЕДНЯЯ КОЛОНКА (ФОРМА) ===== */}
-        <div className="flex flex-col items-center justify-center  w-full max-w-[700px] mx-auto space-y-4 ">
-          <h1 className="text-2xl font-semibold bg-gradient-to-r from-fuchsia-600 to-sky-500 bg-clip-text text-transparent text-center mb-1">
-            Калькулятор прибыли
-          </h1>
+          {/* ===== СРЕДНЯЯ КОЛОНКА (ФОРМА) ===== */}
+          <div className="flex flex-col items-center justify-center  w-full max-w-[700px] mx-auto space-y-4 ">
+            <h1 className="text-2xl font-semibold bg-gradient-to-r from-fuchsia-600 to-sky-500 bg-clip-text text-transparent text-center mb-1">
+              Калькулятор прибыли
+            </h1>
 
-          <FormCard
-            onSubmit={handleSubmit}
-            // [NEW] прокидываем ошибки в форму
-            errors={{
-              price: errPrice,
-              cost: errCost,
-              feePct: errFeePct,
-              logistics: errLogistics,
-            }}
-            fields={[
-              {
-                id: 'sku',
-                label: 'Товар (название или артикул)',
-                type: 'text',
-                value: sku,
-                set: setSku,
-              },
-              {
-                id: 'price',
-                label: 'Цена продажи, ₽',
-                type: 'number',
-                value: price,
-                set: setPrice,
-              },
-              {
-                id: 'cost',
-                label: 'Себестоимость, ₽',
-                type: 'number',
-                value: cost,
-                set: setCost,
-              },
-              {
-                id: 'feePct',
-                label: 'Комиссия площадки, %',
-                type: 'number',
-                value: feePct,
-                set: setFeePct,
-                min: 0,
-                max: 100,
-              },
-              {
-                id: 'logistics',
-                label: 'Логистика, ₽/шт',
-                type: 'number',
-                value: logistics,
-                set: setLogistics,
-              },
-            ]}
-            previewProfitClass={previewProfitClass}
-            profitPreview={profitPreview}
-            previewMarginClass={previewMarginClass}
-            marginPreview={marginPreview}
-            onOpenTable={() => setSheetOpen(true)}
-          />
-        </div>
-
-        {/* ===== ПРАВАЯ КОЛОНКА (ВОЙТИ / ВЫЙТИ) ===== */}
-        <div className="flex justify-center items-start pt-2">
-          {authed ? (
-            <LogoutButton
-              onAfterSignOut={() => {
-                setAuthed(false)
-                setRows(loadRows<Row>())
-                setImportInfo(null)
+            <FormCard
+              onSubmit={handleSubmit}
+              // [NEW] прокидываем ошибки в форму
+              errors={{
+                price: errPrice,
+                cost: errCost,
+                feePct: errFeePct,
+                logistics: errLogistics,
               }}
+              fields={[
+                {
+                  id: 'sku',
+                  label: 'Товар (название или артикул)',
+                  type: 'text',
+                  value: sku,
+                  set: setSku,
+                },
+                {
+                  id: 'price',
+                  label: 'Цена продажи, ₽',
+                  type: 'number',
+                  value: price,
+                  set: setPrice,
+                },
+                {
+                  id: 'cost',
+                  label: 'Себестоимость, ₽',
+                  type: 'number',
+                  value: cost,
+                  set: setCost,
+                },
+                {
+                  id: 'feePct',
+                  label: 'Комиссия площадки, %',
+                  type: 'number',
+                  value: feePct,
+                  set: setFeePct,
+                  min: 0,
+                  max: 100,
+                },
+                {
+                  id: 'logistics',
+                  label: 'Логистика, ₽/шт',
+                  type: 'number',
+                  value: logistics,
+                  set: setLogistics,
+                },
+              ]}
+              previewProfitClass={previewProfitClass}
+              profitPreview={profitPreview}
+              previewMarginClass={previewMarginClass}
+              marginPreview={marginPreview}
+              onOpenTable={() => setSheetOpen(true)}
+              busyAdd={busyAdd}
             />
-          ) : (
-            <Link
-              href="/login"
-              className="px-4 py-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-sky-500 text-white hover:opacity-90 transition"
-            >
-              Войти
-            </Link>
-          )}
+          </div>
+
+          {/* ===== ПРАВАЯ КОЛОНКА (ВОЙТИ / ВЫЙТИ) ===== */}
+          <div className="flex justify-center items-start pt-2">
+            {authed ? (
+              <LogoutButton
+                onAfterSignOut={() => {
+                  setAuthed(false)
+                  setRows(loadRows<Row>())
+                  setImportInfo(null)
+                  setToast('Показаны локальные данные')
+                }}
+              />
+            ) : (
+              <Link
+                href="/login"
+                className="px-4 py-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-sky-500 text-white hover:opacity-90 transition"
+              >
+                Войти
+              </Link>
+            )}
+          </div>
         </div>
-      </div>
 
-      {sheetOpen && (
-        <div
-          className="fixed inset-0 bg-black/30 backdrop-blur-[1px] z-20 transition-opacity"
-          onClick={() => {
-            setSheetOpen(false)
-            handleCancelEdit()
-          }}
-        />
-      )}
+        {sheetOpen && (
+          <div
+            className="fixed inset-0 bg-black/30 backdrop-blur-[1px] z-20 transition-opacity"
+            onClick={() => {
+              setSheetOpen(false)
+              handleCancelEdit()
+            }}
+          />
+        )}
 
-      <section
-        className={[
-          'fixed inset-x-0 bottom-0 z-30',
-          'transform transition-transform duration-500 ease-in-out will-change-[transform]',
-          sheetOpen
-            ? 'translate-y-0 pointer-events-auto'
-            : 'translate-y-full pointer-events-none',
-        ].join(' ')}
-      >
-        <div className="mx-auto w-full max-w-[1400px] px-4">
-          <div className="rounded-t-2xl border border-gray-200/70 bg-white/95 backdrop-blur shadow-2xl max-h-[85vh] flex flex-col overflow-hidden">
-            <div className="flex justify-center pt-2">
-              <div className="h-1.5 w-12 rounded-full bg-gray-300" />
-            </div>
-
-            {/* тулбар */}
-            <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-white/95 backdrop-blur border-b border-gray-200/60">
-              <div className="text-sm text-gray-600">
-                Всего позиций:&nbsp;
-                <span className="font-semibold">{rows.length}</span>
+        <section
+          className={[
+            'fixed inset-x-0 bottom-0 z-30',
+            'transform transition-transform duration-500 ease-in-out will-change-[transform]',
+            sheetOpen
+              ? 'translate-y-0 pointer-events-auto'
+              : 'translate-y-full pointer-events-none',
+          ].join(' ')}
+        >
+          <div className="mx-auto w-full max-w-[1400px] px-4">
+            <div className="rounded-t-2xl border border-gray-200/70 bg-white/95 backdrop-blur shadow-2xl max-h-[85vh] flex flex-col overflow-hidden">
+              <div className="flex justify-center pt-2">
+                <div className="h-1.5 w-12 rounded-full bg-gray-300" />
               </div>
 
-              <div className="flex items-center gap-2">
-                {rows.length > 0 && (
-                  <button
-                    onClick={handleClearAll}
-                    className="px-4 py-2 rounded-xl border border-gray-300 bg-white/90 text-gray-700 hover:bg-white transition"
-                  >
-                    Очистить всё
-                  </button>
-                )}
+              {/* тулбар */}
+              <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-white/95 backdrop-blur border-b border-gray-200/60">
+                <div className="text-sm text-gray-600">
+                  Всего позиций:&nbsp;
+                  <span className="font-semibold">{rows.length}</span>
+                </div>
 
-                {/* Импорт + тултип сверху + шаблон */}
-                <div className="relative group inline-flex items-center gap-2">
-                  <input
-                    id="csv-file"
-                    type="file"
-                    accept=".csv,text/csv"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const inputEl = e.currentTarget as HTMLInputElement // Сохранили ссылку ДО await
-                      const file = inputEl.files?.[0]
-                      if (!file) return
-
-                      try {
-                        const text = await file.text()
-                        const { rows: parsed, errors } =
-                          parseBaseWithReport(text)
-
-                        if (parsed.length === 0) {
-                          setImportInfo({
-                            type: 'error',
-                            msg: 'Проверьте правильность данных.',
-                            errors,
-                          })
-                        } else {
-                          setRows((prev) => [...parsed, ...prev])
-                          if (errors.length > 0) {
-                            setImportInfo({
-                              type: 'warn',
-                              msg: `Импортировано: ${parsed.length}, пропущено: ${errors.length}`,
-                              errors,
-                            })
-                          } else {
-                            setImportInfo({
-                              type: 'success',
-                              msg: `Импортировано: ${parsed.length}.`,
-                            })
-                          }
-                          if (!sheetOpen) setSheetOpen(true)
-                        }
-                      } catch {
-                        setImportInfo({
-                          type: 'error',
-                          msg: 'Не удалось прочитать файл. Попробуйте снова.',
-                        })
-                      } finally {
-                        inputEl.value = ''
+                <div className="flex items-center gap-2">
+                  {rows.length > 0 && (
+                    <button
+                      onClick={() =>
+                        withBusy(setBusyClear, handleClearAll, 200)
                       }
-                    }}
-                  />
+                      disabled={busyClear}
+                      className="px-4 py-2 rounded-xl border border-gray-300 bg-white/90 text-gray-700 hover:bg-white transition disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center"
+                    >
+                      {busyClear ? (
+                        <>
+                          <Spinner />
+                          Очищаю…
+                        </>
+                      ) : (
+                        'Очистить всё'
+                      )}
+                    </button>
+                  )}
 
-                  <button
-                    onClick={() => document.getElementById('csv-file')?.click()}
-                    className="px-4 py-2 rounded-xl border border-emerald-300 text-emerald-700 bg-white/90 hover:bg-emerald-50 transition"
-                  >
-                    Импорт CSV
-                  </button>
+                  {/* Импорт + тултип сверху + шаблон */}
+                  <div className="relative  inline-flex items-center gap-2">
+                    <input
+                      id="csv-file"
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const inputEl = e.currentTarget as HTMLInputElement
+                        const file = inputEl.files?.[0]
+                        if (!file) return
+                        await withBusy(
+                          setBusyImport,
+                          async () => {
+                            setImportInfo(null)
+                            const text = await file.text()
+                            const { rows: parsed, errors } =
+                              parseBaseWithReport(text)
+                            if (parsed.length === 0) {
+                              setImportInfo({
+                                type: 'error',
+                                msg: 'Проверьте правильность данных.',
+                                errors,
+                              })
+                              setToast('Не удалось выполнить действие')
+                              return
+                            }
+                            setRows((prev) => [...parsed, ...prev])
+                            if (errors.length > 0) {
+                              setImportInfo({
+                                type: 'warn',
+                                msg: `Импортировано: ${parsed.length}, пропущено: ${errors.length}`,
+                                errors,
+                              })
+                            } else {
+                              setImportInfo({
+                                type: 'success',
+                                msg: `Импортировано: ${parsed.length}.`,
+                              })
+                            }
+                            if (!sheetOpen) setSheetOpen(true)
+                          },
+                          200
+                        )
+                        inputEl.value = ''
+                      }}
+                    />
 
-                  <button
-                    type="button"
-                    className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 focus:outline-none relative group"
-                  >
-                    i
-                    <div
-                      className="
+                    <button
+                      onClick={() =>
+                        document.getElementById('csv-file')?.click()
+                      }
+                      disabled={busyImport}
+                      className="px-4 py-2 rounded-xl border border-emerald-300 text-emerald-700 bg-white/90 hover:bg-emerald-50 transition disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center"
+                    >
+                      {busyImport ? (
+                        <>
+                          <Spinner />
+                          Импортирую…
+                        </>
+                      ) : (
+                        'Импорт CSV'
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="group shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 focus:outline-none relative group"
+                    >
+                      i
+                      <div
+                        className="
       absolute top-full mt-2 left-0 z-50 hidden group-hover:block
       w-[360px] rounded-lg border border-gray-200 bg-white shadow-xl p-3 text-xs text-gray-700 text-left
       transition ease-out duration-150
       opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0
     "
-                    >
-                      <p className="font-semibold mb-1">Как импортировать</p>
-                      <div className="space-y-1">
-                        <p>
-                          Для импорта используйте только поля:&nbsp;
-                          <br />
-                          <b>Товар, Цена, Себестоимость, Комиссия %, Логистика</b>
-                          .
-                          <br />
-                          Остальные показатели программа рассчитает
-                          автоматически.
-                        </p>
-                        <p className="mt-2">
-                          📌 Поддерживаются такие варианты:
-                        </p>
-                        <p>
-                          – Разделители: <code>;</code> или <code>,</code>{' '}
-                          (пример: <code>Товар;100;50;10;20</code>)
-                        </p>
-                        <p>
-                          – Цены: <code>100</code> или <code>100,50 ₽</code>
-                        </p>
-                        <p>
-                          – Комиссия: <code>10</code> или <code>10 %</code>
-                        </p>
-                        <p>
-                          – Логистика: <code>20</code> или <code>20 ₽</code>
-                        </p>
+                      >
+                        <p className="font-semibold mb-1">Как импортировать</p>
+                        <div className="space-y-1">
+                          <p>
+                            Для импорта используйте только поля:&nbsp;
+                            <br />
+                            <b>
+                              Товар, Цена, Себестоимость, Комиссия %, Логистика
+                            </b>
+                            .
+                            <br />
+                            Остальные показатели программа рассчитает
+                            автоматически.
+                          </p>
+                          <p className="mt-2">
+                            📌 Поддерживаются такие варианты:
+                          </p>
+                          <p>
+                            – Разделители: <code>;</code> или <code>,</code>{' '}
+                            (пример: <code>Товар;100;50;10;20</code>)
+                          </p>
+                          <p>
+                            – Цены: <code>100</code> или <code>100,50 ₽</code>
+                          </p>
+                          <p>
+                            – Комиссия: <code>10</code> или <code>10 %</code>
+                          </p>
+                          <p>
+                            – Логистика: <code>20</code> или <code>20 ₽</code>
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </button>
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        withBusy(
+                          setBusyTemplate,
+                          async () => {
+                            // 👇 даём React шанс отрисовать спиннер до начала синхронной логики
+                            await sleep(0)
+
+                            const tpl =
+                              '\uFEFFТовар;Цена;Себестоимость;Комиссия %;Логистика\n' +
+                              'пример;100;50;10;20\n'
+                            downloadCSV(tpl, 'sku-template.csv')
+
+                            setToast('Шаблон выгружен')
+                          },
+                          200
+                        )
+                      }
+                      disabled={busyTemplate}
+                      className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 bg-white/90 hover:bg-gray-50 transition disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center"
+                    >
+                      {busyTemplate ? (
+                        <>
+                          <Spinner /> Готовлю…
+                        </>
+                      ) : (
+                        'Шаблон CSV'
+                      )}
+                    </button>
+                  </div>
+
+                  {/* чекбокс единиц + экспорт */}
+                  {rows.length > 0 && (
+                    <>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 ml-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={addUnits}
+                          onChange={(e) => setAddUnits(e.target.checked)}
+                        />
+                        с ед. изм.
+                      </label>
+                    </>
+                  )}
+                  {rows.length > 0 && (
+                    <>
+                      <button
+                        onClick={() =>
+                          withBusy(
+                            setBusyExport,
+                            async () => {
+                              await sleep(0)
+                              const csv = rowsWithMetricsToCSV(
+                                computed.rows as RowWithMetrics[],
+                                addUnits
+                              )
+                              const stamp = new Date()
+                                .toISOString()
+                                .replace(/[:T]/g, '-')
+                                .slice(0, 19)
+                              downloadCSV(csv, `sku-profit-${stamp}.csv`)
+                            },
+                            200
+                          )
+                        }
+                        disabled={busyExport}
+                        className="px-4 py-2 rounded-xl border border-indigo-300 text-indigo-700 bg-white/90 hover:bg-indigo-50 transition disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center"
+                      >
+                        {busyExport ? (
+                          <>
+                            <Spinner />
+                            Экспорт…
+                          </>
+                        ) : (
+                          'Экспорт CSV'
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          withBusy(
+                            setBusyExport,
+                            async () => {
+                              await sleep(0)
+                              exportXLSX(
+                                computed.rows as RowWithMetrics[],
+                                addUnits
+                              )
+                            },
+                            200
+                          )
+                        }
+                        disabled={busyExport}
+                        className="px-4 py-2 rounded-xl border border-indigo-300 text-indigo-700 bg-white/90 hover:bg-indigo-50 transition disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center"
+                      >
+                        {busyExport ? (
+                          <>
+                            <Spinner />
+                            Экспорт…
+                          </>
+                        ) : (
+                          'Экспорт XLSX'
+                        )}
+                      </button>
+                    </>
+                  )}
 
                   <button
                     onClick={() => {
-                      const tpl =
-                        '\uFEFFТовар;Цена;Себестоимость;Комиссия %;Логистика\n' +
-                        'пример;100;50;10;20\n'
-                      downloadCSV(tpl, 'sku-template.csv')
+                      setSheetOpen(false)
+                      setImportInfo(null)
+                      handleCancelEdit()
                     }}
-                    className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 bg-white/90 hover:bg-gray-50 transition"
+                    className="px-4 py-2 rounded-xl bg-gray-800 text-white hover:bg-gray-700 transition"
                   >
-                    Шаблон CSV
+                    Закрыть
                   </button>
                 </div>
+              </div>
 
-                {/* чекбокс единиц + экспорт */}
-               { rows.length > 0 &&
-               <><label className="flex items-center gap-2 text-sm text-gray-700 ml-2">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4"
-                    checked={addUnits}
-                    onChange={(e) => setAddUnits(e.target.checked)}
-                  />
-                  с ед. изм.
-                </label>
-                </>
-                }
-                {rows.length > 0 && (
-                  <>
-                    <button
-                      onClick={() => {
-                        const csv = rowsWithMetricsToCSV(
-                          computed.rows as RowWithMetrics[],
-                          addUnits
-                        )
-                        const stamp = new Date()
-                          .toISOString()
-                          .replace(/[:T]/g, '-')
-                          .slice(0, 19)
-                        downloadCSV(csv, `sku-profit-${stamp}.csv`)
-                      }}
-                      className="px-4 py-2 rounded-xl border border-indigo-300 text-indigo-700 bg-white/90 hover:bg-indigo-50 transition"
-                    >
-                      Экспорт CSV
-                    </button>
-
-                    {/* [ADD] Экспорт XLSX */}
-                    <button
-                      onClick={() =>
-                        exportXLSX(computed.rows as RowWithMetrics[], addUnits)
-                      }
-                      className="px-4 py-2 rounded-xl border border-indigo-300 text-indigo-700 bg-white/90 hover:bg-indigo-50 transition"
-                    >
-                      Экспорт XLSX
-                    </button>
-                  </>
-                )}
-
-                <button
-                  onClick={() => {
-                    setSheetOpen(false)
-                    setImportInfo(null)
-                    handleCancelEdit()
-                  }}
-                  className="px-4 py-2 rounded-xl bg-gray-800 text-white hover:bg-gray-700 transition"
+              {importInfo && (
+                <div
+                  className={[
+                    'absolute top-3 right-3 z-50 max-w-[420px]',
+                    'px-3 py-2 rounded-lg text-sm shadow-lg border',
+                    importInfo.type === 'success' &&
+                      'bg-emerald-50 text-emerald-800 border-emerald-200',
+                    importInfo.type === 'warn' &&
+                      'bg-amber-50 text-amber-800 border-amber-200',
+                    importInfo.type === 'error' &&
+                      'bg-rose-50 text-rose-800 border-rose-200',
+                  ].join(' ')}
                 >
-                  Закрыть
-                </button>
-              </div>
-            </div>
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1">
+                      <span className="font-medium">
+                        {importInfo.type === 'success'
+                          ? 'Готово'
+                          : importInfo.type === 'warn'
+                          ? 'Частично'
+                          : 'Ошибка'}
+                      </span>
+                      <span className="ml-2">{importInfo.msg}</span>
 
-            {importInfo && (
-              <div
-                className={[
-                  'absolute top-3 right-3 z-50 max-w-[420px]',
-                  'px-3 py-2 rounded-lg text-sm shadow-lg border',
-                  importInfo.type === 'success' &&
-                    'bg-emerald-50 text-emerald-800 border-emerald-200',
-                  importInfo.type === 'warn' &&
-                    'bg-amber-50 text-amber-800 border-amber-200',
-                  importInfo.type === 'error' &&
-                    'bg-rose-50 text-rose-800 border-rose-200',
-                ].join(' ')}
-              >
-                <div className="flex items-start gap-2">
-                  <div className="flex-1">
-                    <span className="font-medium">
-                      {importInfo.type === 'success'
-                        ? 'Готово'
-                        : importInfo.type === 'warn'
-                        ? 'Частично'
-                        : 'Ошибка'}
-                    </span>
-                    <span className="ml-2">{importInfo.msg}</span>
+                      {(importInfo.type === 'warn' ||
+                        importInfo.type === 'error') &&
+                        importInfo.errors &&
+                        importInfo.errors.length > 0 && (
+                          <button
+                            onClick={() =>
+                              downloadImportErrors(importInfo.errors!)
+                            }
+                            className="ml-2 underline decoration-dotted hover:no-underline"
+                          >
+                            Отчёт
+                          </button>
+                        )}
+                    </div>
 
-                    {(importInfo.type === 'warn' ||
-                      importInfo.type === 'error') &&
-                      importInfo.errors &&
-                      importInfo.errors.length > 0 && (
-                        <button
-                          onClick={() =>
-                            downloadImportErrors(importInfo.errors!)
-                          }
-                          className="ml-2 underline decoration-dotted hover:no-underline"
-                        >
-                          Отчёт
-                        </button>
-                      )}
+                    <button
+                      onClick={() => setImportInfo(null)}
+                      className="ml-2 shrink-0 rounded-md px-2 py-0.5 hover:bg-black/5"
+                    >
+                      ×
+                    </button>
                   </div>
-
-                  <button
-                    onClick={() => setImportInfo(null)}
-                    className="ml-2 shrink-0 rounded-md px-2 py-0.5 hover:bg-black/5"
-                  >
-                    ×
-                  </button>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* [ADD] мини-дашборд (перед таблицей) */}
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              <MiniDashboard
-                profitBySku={profitBySku}
-                marginSeries={marginSeries}
-                onClearMargin={() => {
-                  setMarginSeries([])
-                  try {
-                    localStorage.removeItem('metrics:marginSeries')
-                  } catch {}
-                }}
-              />
-
-              {/* таблица */}
-              <div className="overflow-x-auto">
-                <DataTable
-                  headerColumns={headerColumns}
-                  SKU_COL_W={SKU_COL_W}
-                  computed={computed}
-                  editingId={editingId}
-                  draftSku={draftSku}
-                  draftPrice={draftPrice}
-                  draftCost={draftCost}
-                  draftFeePct={draftFeePct}
-                  draftLogistics={draftLogistics}
-                  setDraftSku={setDraftSku}
-                  setDraftPrice={setDraftPrice}
-                  setDraftCost={setDraftCost}
-                  setDraftFeePct={setDraftFeePct}
-                  setDraftLogistics={setDraftLogistics}
-                  handleStartEdit={handleStartEdit}
-                  handleSaveEdit={handleSaveEdit}
-                  handleCancelEdit={handleCancelEdit}
-                  handleRemove={handleRemove}
-                  totalMarginClass={totalMarginClass}
+              {/* [ADD] мини-дашборд (перед таблицей) */}
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <MiniDashboard
+                  profitBySku={profitBySku}
+                  marginSeries={marginSeries}
+                  onClearMargin={() => {
+                    setMarginSeries([])
+                    try {
+                      localStorage.removeItem('metrics:marginSeries')
+                    } catch {}
+                  }}
                 />
+
+                {/* таблица */}
+                <div className="overflow-x-auto">
+                  <DataTable
+                    headerColumns={headerColumns}
+                    SKU_COL_W={SKU_COL_W}
+                    computed={computed}
+                    editingId={editingId}
+                    draftSku={draftSku}
+                    draftPrice={draftPrice}
+                    draftCost={draftCost}
+                    draftFeePct={draftFeePct}
+                    draftLogistics={draftLogistics}
+                    setDraftSku={setDraftSku}
+                    setDraftPrice={setDraftPrice}
+                    setDraftCost={setDraftCost}
+                    setDraftFeePct={setDraftFeePct}
+                    setDraftLogistics={setDraftLogistics}
+                    handleStartEdit={handleStartEdit}
+                    handleSaveEdit={handleSaveEdit}
+                    handleCancelEdit={handleCancelEdit}
+                    handleRemove={handleRemove}
+                    totalMarginClass={totalMarginClass}
+                  />
+                </div>
               </div>
             </div>
           </div>
+        </section>
+      </main>
+
+      {/* toast */}
+      {toast && (
+        <div
+          className={[
+            'fixed top-4 right-4 z-[100] rounded-lg px-4 py-2 text-sm shadow-lg border transition-opacity duration-300',
+            toast.includes('Не удалось')
+              ? 'bg-rose-50 text-rose-800 border-rose-200'
+              : toast.includes('Шаблон') || toast.includes('синхронизированы')
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : toast.includes('локальные')
+              ? 'bg-sky-50 text-sky-800 border-sky-200'
+              : 'bg-gray-50 text-gray-800 border-gray-200',
+          ].join(' ')}
+        >
+          {toast}
         </div>
-      </section>
-    </main>
+      )}
+    </>
   )
 }
