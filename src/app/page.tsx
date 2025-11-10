@@ -1,6 +1,8 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
+import Tooltip from './components/Tooltip'
+
 import Spinner from './components/ui/Spinner'
 import { toNum, clamp, unitRevenue, unitFee, makeId } from '../lib/helpers'
 import type { Row, RowWithMetrics } from '../lib/types'
@@ -1032,35 +1034,18 @@ export default function Home() {
                       )}
                     </button>
 
-                    <button
-                      type="button"
-                      className="group shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 focus:outline-none relative group"
-                    >
-                      i
-                      <div
-                        className="
-      absolute top-full mt-2 left-0 z-50 hidden group-hover:block
-      w-[360px] rounded-lg border border-gray-200 bg-white shadow-xl p-3 text-xs text-gray-700 text-left
-      transition ease-out duration-150
-      opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0
-    "
-                      >
-                        <p className="font-semibold mb-1">Как импортировать</p>
-                        <div className="space-y-1">
+                    <Tooltip
+                      maxWidth={360}
+                      content={
+                        <div className="w-[340px]">
                           <p>
-                            Для импорта используйте только поля:&nbsp;
-                            <br />
+                            Используйте поля:{' '}
                             <b>
                               Товар, Цена, Себестоимость, Комиссия %, Логистика
                             </b>
-                            .
-                            <br />
-                            Остальные показатели программа рассчитает
-                            автоматически.
+                            . Остальное посчитается автоматически.
                           </p>
-                          <p className="mt-2">
-                            📌 Поддерживаются такие варианты:
-                          </p>
+                          <p className="mt-2">📌 Поддерживаются варианты:</p>
                           <p>
                             – Разделители: <code>;</code> или <code>,</code>{' '}
                             (пример: <code>Товар;100;50;10;20</code>)
@@ -1075,8 +1060,12 @@ export default function Home() {
                             – Логистика: <code>20</code> или <code>20 ₽</code>
                           </p>
                         </div>
-                      </div>
-                    </button>
+                      }
+                    >
+                      <span className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 cursor-pointer">
+                        i
+                      </span>
+                    </Tooltip>
 
                     <button
                       onClick={() =>
