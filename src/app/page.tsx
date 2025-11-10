@@ -1250,41 +1250,76 @@ export default function Home() {
 
               {/* [ADD] мини-дашборд (перед таблицей) */}
               <div className="flex-1 min-h-0 overflow-y-auto">
-                <MiniDashboard
-                  profitBySku={profitBySku}
-                  marginSeries={marginSeries}
-                  onClearMargin={() => {
-                    setMarginSeries([])
-                    try {
-                      localStorage.removeItem('metrics:marginSeries')
-                    } catch {}
-                  }}
-                />
-
-                {/* таблица */}
-                <div className="overflow-x-auto">
-                  <DataTable
-                    headerColumns={headerColumns}
-                    SKU_COL_W={SKU_COL_W}
-                    computed={computed}
-                    editingId={editingId}
-                    draftSku={draftSku}
-                    draftPrice={draftPrice}
-                    draftCost={draftCost}
-                    draftFeePct={draftFeePct}
-                    draftLogistics={draftLogistics}
-                    setDraftSku={setDraftSku}
-                    setDraftPrice={setDraftPrice}
-                    setDraftCost={setDraftCost}
-                    setDraftFeePct={setDraftFeePct}
-                    setDraftLogistics={setDraftLogistics}
-                    handleStartEdit={handleStartEdit}
-                    handleSaveEdit={handleSaveEdit}
-                    handleCancelEdit={handleCancelEdit}
-                    handleRemove={handleRemove}
-                    totalMarginClass={totalMarginClass}
+                {' '}
+                {rows.length === 0 ? (
+                  <div className="px-4 pb-4 text-sm text-gray-600">
+                    Пока нет данных для графиков.{' '}
+                    <button
+                      onClick={() =>
+                        document.getElementById('csv-file')?.click()
+                      }
+                      className="underline"
+                    >
+                      Импорт CSV
+                    </button>{' '}
+                    или добавьте первую позицию выше в форме.
+                    <div className="mt-1 text-xs text-gray-500">
+                      История маржи хранится локально (localStorage).
+                    </div>
+                  </div>
+                ) : (
+                  <MiniDashboard
+                    profitBySku={profitBySku}
+                    marginSeries={marginSeries}
+                    onClearMargin={() => {
+                      setMarginSeries([])
+                      try {
+                        localStorage.removeItem('metrics:marginSeries')
+                      } catch {}
+                    }}
                   />
-                </div>
+                )}
+                {/* таблица */}
+                {rows.length === 0 ? (
+                  <div className="px-4 pb-6 text-center text-gray-600">
+                    Список пуст.{' '}
+                    <button
+                      onClick={() =>
+                        document.getElementById('csv-file')?.click()
+                      }
+                      className="underline"
+                    >
+                      {' '}
+                      Импорт CSV{' '}
+                    </button>{' '}
+                    или добавьте первую позицию.{' '}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    {' '}
+                    <DataTable
+                      headerColumns={headerColumns}
+                      SKU_COL_W={SKU_COL_W}
+                      computed={computed}
+                      editingId={editingId}
+                      draftSku={draftSku}
+                      draftPrice={draftPrice}
+                      draftCost={draftCost}
+                      draftFeePct={draftFeePct}
+                      draftLogistics={draftLogistics}
+                      setDraftSku={setDraftSku}
+                      setDraftPrice={setDraftPrice}
+                      setDraftCost={setDraftCost}
+                      setDraftFeePct={setDraftFeePct}
+                      setDraftLogistics={setDraftLogistics}
+                      handleStartEdit={handleStartEdit}
+                      handleSaveEdit={handleSaveEdit}
+                      handleCancelEdit={handleCancelEdit}
+                      handleRemove={handleRemove}
+                      totalMarginClass={totalMarginClass}
+                    />{' '}
+                  </div>
+                )}
               </div>
             </div>
           </div>
