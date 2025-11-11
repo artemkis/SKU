@@ -2,6 +2,15 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import Tooltip from './components/Tooltip'
+import {
+  Trash2,
+  Upload,
+  FileSpreadsheet,
+  Download,
+  FileDown,
+  X as XIcon,
+  Info as InfoIcon,
+} from 'lucide-react'
 
 import Spinner from './components/ui/Spinner'
 import { toNum, clamp, unitRevenue, unitFee, makeId } from '../lib/helpers'
@@ -26,7 +35,9 @@ import * as XLSX from 'xlsx'
 // [ADD] Мини-дашборд (recharts)
 import MiniDashboard from './components/MiniDashboard'
 
-const SKU_COL_W = 'w-[150px] min-w-[150px] max-w-[150px]'
+export const SKU_COL_W =
+  'min-w-0 w-[30vw] max-w-[50vw] ' +
+  'sm:w-[150px] sm:min-w-[150px] sm:max-w-[150px]'
 
 // тип строки из БД (fee в рублях/процентах — как у тебя в таблице)
 type DbRow = {
@@ -943,247 +954,307 @@ export default function Home() {
               </div>
 
               {/* тулбар */}
+              {/* тулбар */}
+              {/* тулбар */}
               <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-white/95 backdrop-blur border-b border-gray-200/60">
                 <div className="text-sm text-gray-600">
                   Всего позиций:&nbsp;
                   <span className="font-semibold">{rows.length}</span>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {rows.length > 0 && (
-                    <button
-                      onClick={() =>
-                        withBusy(setBusyClear, handleClearAll, 200)
-                      }
-                      disabled={busyClear}
-                      className="px-4 py-2 rounded-xl border border-gray-300 bg-white/90 text-gray-700 hover:bg-white transition disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center"
+                <div className="flex items-center gap-2 ml-3 min-w-0 w-full justify-end">
+                  {/* область со скроллом для кнопок */}
+                  <div className="relative max-w-full flex-1">
+                    <div
+                      className="overflow-x-auto overscroll-x-contain px-2 toolbar-scroll"
+                      style={{ scrollbarGutter: 'stable' }} // стабилизирует высоту на Windows
                     >
-                      {busyClear ? (
-                        <>
-                          <Spinner />
-                          Очищаю…
-                        </>
-                      ) : (
-                        'Очистить всё'
-                      )}
-                    </button>
-                  )}
-
-                  {/* Импорт + тултип сверху + шаблон */}
-                  <div className="relative  inline-flex items-center gap-2">
-                    <input
-                      id="csv-file"
-                      type="file"
-                      accept=".csv,text/csv"
-                      className="hidden"
-                      onChange={async (e) => {
-                        const inputEl = e.currentTarget as HTMLInputElement
-                        const file = inputEl.files?.[0]
-                        if (!file) return
-                        await withBusy(
-                          setBusyImport,
-                          async () => {
-                            setImportInfo(null)
-                            const text = await file.text()
-                            const { rows: parsed, errors } =
-                              parseBaseWithReport(text)
-                            if (parsed.length === 0) {
-                              setImportInfo({
-                                type: 'error',
-                                msg: 'Проверьте правильность данных.',
-                                errors,
-                              })
-                              setToast('Не удалось выполнить действие')
-                              return
+                      <div className="flex items-center gap-2 whitespace-nowrap">
+                        {/* === Очистить всё === */}
+                        {rows.length > 0 && (
+                          <button
+                            onClick={() =>
+                              withBusy(setBusyClear, handleClearAll, 200)
                             }
-                            setRows((prev) => [...parsed, ...prev])
-                            if (errors.length > 0) {
-                              setImportInfo({
-                                type: 'warn',
-                                msg: `Импортировано: ${parsed.length}, пропущено: ${errors.length}`,
-                                errors,
-                              })
-                            } else {
-                              setImportInfo({
-                                type: 'success',
-                                msg: `Импортировано: ${parsed.length}.`,
-                              })
+                            disabled={busyClear}
+                            className="btn-gradient disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {busyClear ? (
+                              <>
+                                <Spinner />
+                                <span className="hidden sm:inline">
+                                  Очищаю…
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <Trash2 className="h-4 w-4" />
+                                <span className="hidden sm:inline">
+                                  Очистить всё
+                                </span>
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        {/* === input для импорта (скрытый) === */}
+                        <input
+                          id="csv-file"
+                          type="file"
+                          accept=".csv,text/csv"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const inputEl = e.currentTarget as HTMLInputElement
+                            const file = inputEl.files?.[0]
+                            if (!file) return
+                            await withBusy(
+                              setBusyImport,
+                              async () => {
+                                setImportInfo(null)
+                                const text = await file.text()
+                                const { rows: parsed, errors } =
+                                  parseBaseWithReport(text)
+                                if (parsed.length === 0) {
+                                  setImportInfo({
+                                    type: 'error',
+                                    msg: 'Проверьте правильность данных.',
+                                    errors,
+                                  })
+                                  setToast('Не удалось выполнить действие')
+                                  return
+                                }
+                                setRows((prev) => [...parsed, ...prev])
+                                if (errors.length > 0) {
+                                  setImportInfo({
+                                    type: 'warn',
+                                    msg: `Импортировано: ${parsed.length}, пропущено: ${errors.length}`,
+                                    errors,
+                                  })
+                                } else {
+                                  setImportInfo({
+                                    type: 'success',
+                                    msg: `Импортировано: ${parsed.length}.`,
+                                  })
+                                }
+                                if (!sheetOpen) setSheetOpen(true)
+                              },
+                              200
+                            )
+                            inputEl.value = ''
+                          }}
+                        />
+
+                        {/* === Импорт CSV === */}
+                        <button
+                          onClick={() =>
+                            document.getElementById('csv-file')?.click()
+                          }
+                          disabled={busyImport}
+                          className={`btn-gradient disabled:opacity-60 disabled:cursor-not-allowed`}
+                        >
+                          {busyImport ? (
+                            <>
+                              <Spinner />
+                              <span className="hidden sm:inline">
+                                Импортирую…
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="h-4 w-4" />
+                              <span className="hidden sm:inline">
+                                Импорт CSV
+                              </span>
+                            </>
+                          )}
+                        </button>
+
+                        {/* === Подсказка (i) === */}
+                        <Tooltip
+                          maxWidth={360}
+                          content={
+                            <div className="w-[340px]">
+                              <p>
+                                Используйте поля:{' '}
+                                <b>
+                                  Товар, Цена, Себестоимость, Комиссия %,
+                                  Логистика
+                                </b>
+                                .
+                              </p>
+                              <p className="mt-2">
+                                📌 Поддерживаются варианты:
+                              </p>
+                              <p>
+                                – Разделители: <code>;</code> или <code>,</code>
+                              </p>
+                              <p>
+                                – Цены: <code>100</code> или{' '}
+                                <code>100,50 ₽</code>
+                              </p>
+                              <p>
+                                – Комиссия: <code>10</code> или{' '}
+                                <code>10 %</code>
+                              </p>
+                              <p>
+                                – Логистика: <code>20</code> или{' '}
+                                <code>20 ₽</code>
+                              </p>
+                            </div>
+                          }
+                        >
+                          <span className="flex-none shrink-0 inline-flex h-9 w-9 sm:h-7 sm:w-7 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 cursor-pointer">
+                            <InfoIcon className="h-4 w-4" />
+                          </span>
+                        </Tooltip>
+
+                        {/* === Шаблон CSV === */}
+                        <button
+                          onClick={() =>
+                            withBusy(
+                              setBusyTemplate,
+                              async () => {
+                                await sleep(0)
+                                const tpl =
+                                  '\uFEFFТовар;Цена;Себестоимость;Комиссия %;Логистика\n' +
+                                  'пример;100;50;10;20\n'
+                                downloadCSV(tpl, 'sku-template.csv')
+                                setToast('Шаблон выгружен')
+                              },
+                              200
+                            )
+                          }
+                          disabled={busyTemplate}
+                          className="btn-gradient disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {busyTemplate ? (
+                            <>
+                              <Spinner />
+                              <span className="hidden sm:inline">Готовлю…</span>
+                            </>
+                          ) : (
+                            <>
+                              <FileSpreadsheet className="h-4 w-4" />
+                              <span className="hidden sm:inline">
+                                Шаблон CSV
+                              </span>
+                            </>
+                          )}
+                        </button>
+
+                        {/* === чекбокс "с ед. изм." === */}
+                        {rows.length > 0 && (
+                          <label className="flex-none flex items-center gap-2 text-sm text-gray-700 ml-1">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4"
+                              checked={addUnits}
+                              onChange={(e) => setAddUnits(e.target.checked)}
+                            />
+                            <span className="hidden sm:inline">с ед. изм.</span>
+                          </label>
+                        )}
+
+                        {/* === Экспорт CSV === */}
+                        {rows.length > 0 && (
+                          <button
+                            onClick={() =>
+                              withBusy(
+                                setBusyExport,
+                                async () => {
+                                  await sleep(0)
+                                  const csv = rowsWithMetricsToCSV(
+                                    computed.rows as RowWithMetrics[],
+                                    addUnits
+                                  )
+                                  const stamp = new Date()
+                                    .toISOString()
+                                    .replace(/[:T]/g, '-')
+                                    .slice(0, 19)
+                                  downloadCSV(csv, `sku-profit-${stamp}.csv`)
+                                },
+                                200
+                              )
                             }
-                            if (!sheetOpen) setSheetOpen(true)
-                          },
-                          200
-                        )
-                        inputEl.value = ''
-                      }}
-                    />
+                            disabled={busyExport}
+                            className="btn-gradient disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {busyExport ? (
+                              <>
+                                <Spinner />
+                                <span className="hidden sm:inline">
+                                  Экспорт…
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <Download className="h-4 w-4" />
+                                <span className="hidden sm:inline">
+                                  Экспорт CSV
+                                </span>
+                              </>
+                            )}
+                          </button>
+                        )}
 
-                    <button
-                      onClick={() =>
-                        document.getElementById('csv-file')?.click()
-                      }
-                      disabled={busyImport}
-                      className="px-4 py-2 rounded-xl border border-emerald-300 text-emerald-700 bg-white/90 hover:bg-emerald-50 transition disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center"
-                    >
-                      {busyImport ? (
-                        <>
-                          <Spinner />
-                          Импортирую…
-                        </>
-                      ) : (
-                        'Импорт CSV'
-                      )}
-                    </button>
+                        {/* === Экспорт XLSX === */}
+                        {rows.length > 0 && (
+                          <button
+                            onClick={() =>
+                              withBusy(
+                                setBusyExport,
+                                async () => {
+                                  await sleep(0)
+                                  exportXLSX(
+                                    computed.rows as RowWithMetrics[],
+                                    addUnits
+                                  )
+                                },
+                                200
+                              )
+                            }
+                            disabled={busyExport}
+                            className="btn-gradient disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            {busyExport ? (
+                              <>
+                                <Spinner />
+                                <span className="hidden sm:inline">
+                                  Экспорт…
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <FileDown className="h-4 w-4" />
+                                <span className="hidden sm:inline">
+                                  Экспорт XLSX
+                                </span>
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
 
-                    <Tooltip
-                      maxWidth={360}
-                      content={
-                        <div className="w-[340px]">
-                          <p>
-                            Используйте поля:{' '}
-                            <b>
-                              Товар, Цена, Себестоимость, Комиссия %, Логистика
-                            </b>
-                            . Остальное посчитается автоматически.
-                          </p>
-                          <p className="mt-2">📌 Поддерживаются варианты:</p>
-                          <p>
-                            – Разделители: <code>;</code> или <code>,</code>{' '}
-                            (пример: <code>Товар;100;50;10;20</code>)
-                          </p>
-                          <p>
-                            – Цены: <code>100</code> или <code>100,50 ₽</code>
-                          </p>
-                          <p>
-                            – Комиссия: <code>10</code> или <code>10 %</code>
-                          </p>
-                          <p>
-                            – Логистика: <code>20</code> или <code>20 ₽</code>
-                          </p>
-                        </div>
-                      }
-                    >
-                      <span className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50 cursor-pointer">
-                        i
-                      </span>
-                    </Tooltip>
-
-                    <button
-                      onClick={() =>
-                        withBusy(
-                          setBusyTemplate,
-                          async () => {
-                            // 👇 даём React шанс отрисовать спиннер до начала синхронной логики
-                            await sleep(0)
-
-                            const tpl =
-                              '\uFEFFТовар;Цена;Себестоимость;Комиссия %;Логистика\n' +
-                              'пример;100;50;10;20\n'
-                            downloadCSV(tpl, 'sku-template.csv')
-
-                            setToast('Шаблон выгружен')
-                          },
-                          200
-                        )
-                      }
-                      disabled={busyTemplate}
-                      className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 bg-white/90 hover:bg-gray-50 transition disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center"
-                    >
-                      {busyTemplate ? (
-                        <>
-                          <Spinner /> Готовлю…
-                        </>
-                      ) : (
-                        'Шаблон CSV'
-                      )}
-                    </button>
+                    {/* мягкие фэйды по краям, намёк на скролл — видны только на xs */}
+                    <div className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-white/95 to-transparent sm:hidden" />
+                    <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-white/95 to-transparent sm:hidden" />
                   </div>
 
-                  {/* чекбокс единиц + экспорт */}
-                  {rows.length > 0 && (
-                    <>
-                      <label className="flex items-center gap-2 text-sm text-gray-700 ml-2">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4"
-                          checked={addUnits}
-                          onChange={(e) => setAddUnits(e.target.checked)}
-                        />
-                        с ед. изм.
-                      </label>
-                    </>
-                  )}
-                  {rows.length > 0 && (
-                    <>
-                      <button
-                        onClick={() =>
-                          withBusy(
-                            setBusyExport,
-                            async () => {
-                              await sleep(0)
-                              const csv = rowsWithMetricsToCSV(
-                                computed.rows as RowWithMetrics[],
-                                addUnits
-                              )
-                              const stamp = new Date()
-                                .toISOString()
-                                .replace(/[:T]/g, '-')
-                                .slice(0, 19)
-                              downloadCSV(csv, `sku-profit-${stamp}.csv`)
-                            },
-                            200
-                          )
-                        }
-                        disabled={busyExport}
-                        className="px-4 py-2 rounded-xl border border-indigo-300 text-indigo-700 bg-white/90 hover:bg-indigo-50 transition disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center"
-                      >
-                        {busyExport ? (
-                          <>
-                            <Spinner />
-                            Экспорт…
-                          </>
-                        ) : (
-                          'Экспорт CSV'
-                        )}
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          withBusy(
-                            setBusyExport,
-                            async () => {
-                              await sleep(0)
-                              exportXLSX(
-                                computed.rows as RowWithMetrics[],
-                                addUnits
-                              )
-                            },
-                            200
-                          )
-                        }
-                        disabled={busyExport}
-                        className="px-4 py-2 rounded-xl border border-indigo-300 text-indigo-700 bg-white/90 hover:bg-indigo-50 transition disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center"
-                      >
-                        {busyExport ? (
-                          <>
-                            <Spinner />
-                            Экспорт…
-                          </>
-                        ) : (
-                          'Экспорт XLSX'
-                        )}
-                      </button>
-                    </>
-                  )}
-
+                  {/* === Закрыть (иконка на xs, текст на ≥sm) === */}
                   <button
                     onClick={() => {
                       setSheetOpen(false)
-                      setImportInfo(null)
                       handleCancelEdit()
                     }}
-                    className="px-4 py-2 rounded-xl bg-gray-800 text-white hover:bg-gray-700 transition"
+                    className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-xl 
+             bg-gradient-to-r from-fuchsia-500 to-sky-500 
+             text-white shadow-md hover:shadow-lg hover:opacity-90 
+             transition active:scale-[0.98]"
+                    aria-label="Закрыть"
                   >
-                    Закрыть
+                    <XIcon className="h-4 w-4 sm:mr-0" />
+                    <span className="hidden sm:inline">Закрыть</span>
                   </button>
                 </div>
               </div>
@@ -1238,8 +1309,11 @@ export default function Home() {
               )}
 
               {/* [ADD] мини-дашборд (перед таблицей) */}
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                {' '}
+
+              <div
+                className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
+                style={{ scrollbarGutter: 'stable both-edges' }}
+              >
                 {rows.length === 0 ? (
                   <div className="px-4 pb-4 text-sm text-gray-600">
                     Пока нет данных для графиков.{' '}
@@ -1257,17 +1331,21 @@ export default function Home() {
                     </div>
                   </div>
                 ) : (
-                  <MiniDashboard
-                    profitBySku={profitBySku}
-                    marginSeries={marginSeries}
-                    onClearMargin={() => {
-                      setMarginSeries([])
-                      try {
-                        localStorage.removeItem('metrics:marginSeries')
-                      } catch {}
-                    }}
-                  />
+                  // изолируем графики от влияния на скролл
+                  <div className="overflow-x-hidden">
+                    <MiniDashboard
+                      profitBySku={profitBySku}
+                      marginSeries={marginSeries}
+                      onClearMargin={() => {
+                        setMarginSeries([])
+                        try {
+                          localStorage.removeItem('metrics:marginSeries')
+                        } catch {}
+                      }}
+                    />
+                  </div>
                 )}
+
                 {/* таблица */}
                 {rows.length === 0 ? (
                   <div className="px-4 pb-6 text-center text-gray-600">
@@ -1278,14 +1356,12 @@ export default function Home() {
                       }
                       className="underline"
                     >
-                      {' '}
-                      Импорт CSV{' '}
+                      Импорт CSV
                     </button>{' '}
                     или добавьте первую позицию.{' '}
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    {' '}
                     <DataTable
                       headerColumns={headerColumns}
                       SKU_COL_W={SKU_COL_W}
@@ -1306,7 +1382,7 @@ export default function Home() {
                       handleCancelEdit={handleCancelEdit}
                       handleRemove={handleRemove}
                       totalMarginClass={totalMarginClass}
-                    />{' '}
+                    />
                   </div>
                 )}
               </div>

@@ -29,18 +29,18 @@ const MiniDashboard: React.FC<Props> = ({
   marginSeries,
   onClearMargin,
 }) => {
-  // 1) guard от гидрации — но БЕЗ раннего return до хуков ниже
+  // 1) guard от гидрации
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // 2) форматтеры и хелперы (обычные функции, не хуки)
+  // 2) форматтеры
   const rubTick = (v: number) => fmtMoney(v)
   const pctTick = (v: number) => `${fmtPct(v)}%`
   const shortSku = (s: string) => (s.length > 12 ? s.slice(0, 11) + '…' : s)
 
-  // 3) useMemo — ВСЕГДА вызываются (безусловно), чтобы не ломать порядок хуков
+  // 3) данные
   const dataSku = useMemo<ProfitBySkuItem[]>(
     () =>
       Array.isArray(profitBySku)
@@ -66,8 +66,7 @@ const MiniDashboard: React.FC<Props> = ({
     [marginSeries]
   )
 
-  // 4) Если ещё не смонтировано — рисуем «пустую» разметку того же размера (без графиков),
-  //    чтобы не было SSR-мисматча и порядок хуков не менялся.
+  // 4) pre-render skeleton (фикс SSR)
   if (!mounted) {
     return (
       <div className="px-4 pb-2">
@@ -79,30 +78,42 @@ const MiniDashboard: React.FC<Props> = ({
     )
   }
 
-  // 5) Нормальный рендер с графиками
+  // 5) основной рендер
   return (
-    <div className="px-4 pb-2">
+    <div className="px-4 pb-2 overflow-x-hidden">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* === Прибыль по SKU === */}
-        <div className="flex-1 min-w-[300px] max-w-[600px] bg-white/90 border border-gray-200 rounded-xl shadow p-4">
+        <div
+          className="flex-1 min-w-[300px] max-w-[600px] bg-white/90 border border-gray-200 rounded-xl shadow p-4"
+        >
           <h3 className="text-sm font-semibold mb-1">Прибыль по товарам</h3>
           <p className="text-xs text-gray-500 mb-2">
             Сколько приносит каждая позиция
           </p>
 
-          <div className="h-[220px]">
+          {/* контейнер графика: изоляция и обрезка, чтобы тултип не вызывал полосы */}
+          <div className="h-[220px] overflow-hidden" style={{ contain: 'layout paint' }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dataSku}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="sku" tickFormatter={shortSku} />
                 <YAxis tickFormatter={rubTick} />
-                <RTooltip />
+                <RTooltip
+                  // тултип не влияет на скроллы
+                  wrapperStyle={{ pointerEvents: 'none' }}
+                  contentStyle={{
+                    padding: '6px 8px',
+                    borderRadius: 8,
+                    border: '1px solid #e5e7eb',
+                  }}
+                  cursor={{ stroke: '#e5e7eb', strokeWidth: 1 }}
+                />
                 <Legend />
                 <Bar
                   dataKey="profit"
                   name="Прибыль/шт"
-                  fill="#2563eb" // ← фирменный цвет
-                  radius={[6, 6, 0, 0]} // скругленные углы
+                  fill="#2563eb"
+                  radius={[6, 6, 0, 0]}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -110,7 +121,9 @@ const MiniDashboard: React.FC<Props> = ({
         </div>
 
         {/* === Общая маржа во времени === */}
-        <div className="flex-1 min-w-[300px] max-w-[600px] bg-white/90 border border-gray-200 rounded-xl shadow p-4">
+        <div
+          className="flex-1 min-w-[300px] max-w-[600px] bg-white/90 border border-gray-200 rounded-xl shadow p-4"
+        >
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-sm font-semibold">История маржи (динамика во времени)</h3>
             {onClearMargin && dataMargin.length > 0 && (
@@ -126,11 +139,12 @@ const MiniDashboard: React.FC<Props> = ({
             Отслеживайте, как менялась средняя маржа при добавлении или редактировании товаров
           </p>
 
-          <div className="h-[220px]">
+          {/* контейнер графика: изоляция и обрезка */}
+          <div className="h-[220px] overflow-hidden" style={{ contain: 'layout paint' }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={dataMargin}
-                margin={{ top: 8, right: 8, left: 0, bottom: 8 }}
+                margin={{ top: 8, right: 12, left: 0, bottom: 8 }}
               >
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="time" />
@@ -141,6 +155,13 @@ const MiniDashboard: React.FC<Props> = ({
                     name === 'margin' ? 'Маржа, %' : name,
                   ]}
                   labelFormatter={(label: string) => `Время: ${label}`}
+                  wrapperStyle={{ pointerEvents: 'none' }}
+                  contentStyle={{
+                    padding: '6px 8px',
+                    borderRadius: 8,
+                    border: '1px solid #e5e7eb',
+                  }}
+                  cursor={{ stroke: '#e5e7eb', strokeWidth: 1 }}
                 />
                 <Legend />
                 <Line
@@ -148,7 +169,7 @@ const MiniDashboard: React.FC<Props> = ({
                   dataKey="margin"
                   name="Маржа, %"
                   strokeWidth={2}
-                  dot={dataMargin.length <= 1} // видимая точка, если 0/1 измерение
+                  dot={dataMargin.length <= 1}
                 />
               </LineChart>
             </ResponsiveContainer>

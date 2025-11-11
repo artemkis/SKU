@@ -8,3 +8,25 @@
   50% { background-position: 100% 50% }
   100% { background-position: 0% 50% }
 }
+
+/* стабилизируем скролл в нижней шторке */
+.sheet-scroll {
+  scrollbar-gutter: stable both-edges;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* графики не вмешиваются в раскладку */
+.chart-stable {
+  contain: layout paint;
+  overflow: hidden;
+}
+
+.btn-gradient {
+  @apply inline-flex items-center gap-2 px-3 py-2 rounded-xl text-white 
+         bg-gradient-to-r from-fuchsia-500 to-sky-500 
+         shadow-sm hover:shadow-md hover:opacity-90 
+         active:scale-[0.98] transition;
+}
+
+

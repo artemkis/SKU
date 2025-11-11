@@ -36,7 +36,7 @@ type ComputedBlock = {
 
 type DataTableProps = {
   headerColumns: HeaderCol[]
-  SKU_COL_W: string
+  SKU_COL_W: string // в page.tsx — адаптивная строка классов (см. примечание)
   computed: ComputedBlock
 
   editingId: string | null
@@ -106,31 +106,61 @@ export default function DataTable({
     )
   }
 
+  // видимые на xs ключевые колонки
+  const CORE_KEYS = new Set(['sku', 'price', 'profit', 'margin'])
+
+  // жёсткие ширины для xs, чтобы колонки не «боролись» за место
+  const XS_W: Record<string, string> = {
+    price: 'w-[22vw] max-w-[22vw]',
+    profit: 'w-[19vw] max-w-[19vw]',
+    margin: 'w-[19vw] max-w-[19vw]',
+  }
+
+  const thClass = (col: HeaderCol) =>
+    [
+      'px-2 sm:px-4 py-2 sm:py-3 font-semibold',
+      CORE_KEYS.has(col.key) ? '' : 'hidden sm:table-cell',
+      col.width ?? '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+
+  const tdClass = (key: string, extra = '') =>
+    [
+      'px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap',
+      CORE_KEYS.has(key) ? '' : 'hidden sm:table-cell',
+      extra,
+    ]
+      .filter(Boolean)
+      .join(' ')
+
   return (
-    <table className="w-full min-w-[1300px] table-auto text-sm">
-      <thead className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b">
+    <table className="w-full min-w-0 table-fixed sm:table-auto text-[13px] sm:text-sm tabular-nums text-left">
+      <thead className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b ">
         <tr className="text-left text-gray-600">
           {headerColumns.map((col) => {
             if (col.key === 'sku') {
+              // SKU — sticky только ≥ sm, на xs — ограничение ширины wrapper-ом
               return (
                 <th
                   key={col.key}
                   className={[
-                    'px-4 py-3 font-semibold sticky left-0 bg-white z-20',
+                    'px-2 sm:px-4 py-2 sm:py-3 font-semibold bg-white sm:sticky sm:left-0 sm:z-20',
                     SKU_COL_W,
-                    col.width ?? '',
                   ].join(' ')}
                 >
-                  <span className="inline-flex items-center whitespace-nowrap gap-2 align-middle">
-                    <span>{col.label}</span>
-                    {col.tooltip && (
-                      <Tooltip content={<TipContent col={col} />}>
-                        <span className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50">
-                          i
-                        </span>
-                      </Tooltip>
-                    )}
-                  </span>
+                  <div className="w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap sm:w-auto sm:max-w-none">
+                    <span className="inline-flex items-center whitespace-nowrap gap-2 align-middle">
+                      <span>Товар</span>
+                      {col.tooltip && (
+                        <Tooltip content={<TipContent col={col} />}> 
+                          <span className="hidden sm:inline-flex shrink-0 h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50">
+                            i
+                          </span>
+                        </Tooltip>
+                      )}
+                    </span>
+                  </div>
                 </th>
               )
             }
@@ -138,13 +168,24 @@ export default function DataTable({
             return (
               <th
                 key={col.key}
-                className={`px-4 py-3 font-semibold ${col.width ?? ''}`}
+                className={[
+                  thClass(col),
+                  XS_W[col.key] ?? '',
+                  col.key !== 'sku' && CORE_KEYS.has(col.key) ? 'text-left' : '',
+                ].join(' ')}
               >
                 <span className="inline-flex items-center whitespace-nowrap gap-2 align-middle">
-                  <span>{col.label}</span>
+                  {/* короткий лейбл на xs, полный на ≥sm */}
+                  <span className="sm:hidden">
+                    {col.key === 'price' ? 'Цена' :
+                     col.key === 'profit' ? 'Приб.' :
+                     col.key === 'margin' ? 'Маржа' : col.label}
+                  </span>
+                  <span className="hidden sm:inline">{col.label}</span>
+
                   {col.tooltip && (
                     <Tooltip content={<TipContent col={col} />}>
-                      <span className="shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50">
+                      <span className="hidden sm:inline-flex shrink-0 h-6 w-6 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50">
                         i
                       </span>
                     </Tooltip>
@@ -153,8 +194,8 @@ export default function DataTable({
               </th>
             )
           })}
-          {/* последняя колонка под кнопки/бейджи */}
-          <th className="px-4 py-3 font-semibold w-[14%]" />
+          {/* колонка действий скрыта на xs */}
+          <th className="px-4 py-3 font-semibold w-[14%] hidden sm:table-cell" />
         </tr>
       </thead>
 
@@ -168,9 +209,24 @@ export default function DataTable({
         ) : (
           <AnimatePresence initial={false}>
             {computed.rows.map((r) => {
-              // ✅ безопасная проверка режима редактирования
               const isEditing =
                 editingId != null && r.id != null && editingId === r.id
+
+              const profitColorClass =
+                r.profit < 0
+                  ? 'text-red-600'
+                  : r.profit > 0
+                  ? 'text-green-600'
+                  : 'text-gray-800'
+
+              const marginColorClass =
+                r.marginPct < 0
+                  ? 'text-red-600'
+                  : r.marginPct > 0
+                  ? r.marginPct < 20
+                    ? 'text-yellow-600'
+                    : 'text-green-600'
+                  : 'text-gray-800'
 
               return (
                 <motion.tr
@@ -186,23 +242,33 @@ export default function DataTable({
                       : 'hover:bg-sky-50/60'
                   }`}
                 >
-                  {/* SKU — фиксированная липкая колонка с жёсткой шириной */}
+                  {/* SKU — sticky ≥ sm, на xs ограничиваем ширину wrapper-ом */}
                   <td
-                    className={`px-4 py-3 font-medium text-gray-800 sticky left-0 bg-white z-10 ${SKU_COL_W} border-r border-gray-200`}
+                    className={[
+                      'px-2 sm:px-4 py-2 sm:py-3 font-medium text-gray-800 bg-white border-r border-gray-200 sm:sticky sm:left-0 sm:z-10',
+                      SKU_COL_W,
+                    ].join(' ')}
                   >
-                    {isEditing ? (
-                      <input
-                        value={draftSku}
-                        onChange={(e) => setDraftSku(e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300"
-                      />
-                    ) : (
-                      <div className="truncate">{r.sku}</div>
-                    )}
+                    <div className="w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap sm:w-auto sm:max-w-none">
+                      {isEditing ? (
+                        <input
+                          value={draftSku}
+                          onChange={(e) => setDraftSku(e.target.value)}
+                          className="w-full rounded-lg border border-gray-300 bg-white px-2 py-1 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300"
+                        />
+                      ) : (
+                        <div className="truncate">{r.sku}</div>
+                      )}
+                    </div>
                   </td>
 
-                  {/* Цена, ₽ */}
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  {/* Цена, ₽ (видна на xs) */}
+                  <td
+                    className={[
+                      tdClass('price'),
+                      XS_W.price,
+                    ].join(' ')}
+                  >
                     {isEditing ? (
                       <input
                         type="number"
@@ -217,8 +283,8 @@ export default function DataTable({
                     )}
                   </td>
 
-                  {/* Себестоимость, ₽ */}
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  {/* Себестоимость, ₽ (скрыта на xs) */}
+                  <td className={tdClass('cost')}>
                     {isEditing ? (
                       <input
                         type="number"
@@ -233,8 +299,8 @@ export default function DataTable({
                     )}
                   </td>
 
-                  {/* Комиссия, % */}
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  {/* Комиссия, % (скрыта на xs) */}
+                  <td className={tdClass('feePct')}>
                     {isEditing ? (
                       <div className="flex items-center gap-1">
                         <input
@@ -257,8 +323,8 @@ export default function DataTable({
                     )}
                   </td>
 
-                  {/* Логистика, ₽ */}
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  {/* Логистика, ₽ (скрыта на xs) */}
+                  <td className={tdClass('logistics')}>
                     {isEditing ? (
                       <input
                         type="number"
@@ -273,53 +339,39 @@ export default function DataTable({
                     )}
                   </td>
 
-                  {/* Выручка, ₽ */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {fmtMoney(r.rev)}
-                  </td>
-                  {/* Комиссия, ₽ */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {fmtMoney(r.fee)}
-                  </td>
-                  {/* Прямые затраты, ₽ */}
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {fmtMoney(r.direct)}
-                  </td>
+                  {/* Выручка, ₽ (скрыта на xs) */}
+                  <td className={tdClass('rev')}>{fmtMoney(r.rev)}</td>
 
-                  {/* Прибыль, ₽ */}
+                  {/* Комиссия, ₽ (скрыта на xs) */}
+                  <td className={tdClass('fee')}>{fmtMoney(r.fee)}</td>
+
+                  {/* Прямые затраты, ₽ (скрыта на xs) */}
+                  <td className={tdClass('direct')}>{fmtMoney(r.direct)}</td>
+
+                  {/* Прибыль, ₽ (видна на xs) */}
                   <td
-                    className={`px-4 py-3 font-semibold whitespace-nowrap ${
-                      r.profit < 0
-                        ? 'text-red-600'
-                        : r.profit > 0
-                        ? 'text-green-600'
-                        : 'text-gray-800'
-                    }`}
+                    className={[
+                      tdClass('profit', `font-semibold ${profitColorClass}`),
+                      XS_W.profit,
+                    ].join(' ')}
                   >
                     {fmtMoney(r.profit)}
                   </td>
 
-                  {/* Маржа, % */}
+                  {/* Маржа, % (видна на xs) */}
                   <td
-                    className={`px-4 py-3 font-semibold whitespace-nowrap ${
-                      r.marginPct < 0
-                        ? 'text-red-600'
-                        : r.marginPct > 0
-                        ? r.marginPct < 20
-                          ? 'text-yellow-600'
-                          : 'text-green-600'
-                        : 'text-gray-800'
-                    }`}
+                    className={[
+                      tdClass('margin', `font-semibold ${marginColorClass}`),
+                      XS_W.margin,
+                    ].join(' ')}
                   >
-                    {fmtPct(r.marginPct)}
-                    {'\u00A0'}%
+                    {fmtPct(r.marginPct)}{' '}%
                   </td>
 
-                  {/* Действия */}
-                  <td className="px-4 py-3 flex gap-2 items-center">
+                  {/* Действия — только ≥ sm */}
+                  <td className="px-4 py-3 hidden sm:flex gap-2 items-center">
                     {!isEditing ? (
                       <>
-                        {/* Редактировать */}
                         <motion.button
                           onClick={() => handleStartEdit(r)}
                           whileHover={{ scale: 1.05 }}
@@ -333,7 +385,6 @@ export default function DataTable({
                           Редактировать
                         </motion.button>
 
-                        {/* Удалить */}
                         <motion.button
                           onClick={() => handleRemove(r.id)}
                           whileHover={{ scale: 1.05 }}
@@ -347,7 +398,6 @@ export default function DataTable({
                           Удалить
                         </motion.button>
 
-                        {/* Убыток */}
                         {r.profit < 0 && (
                           <motion.span
                             initial={{ opacity: 0, y: -3 }}
@@ -362,7 +412,6 @@ export default function DataTable({
                       </>
                     ) : (
                       <>
-                        {/* Сохранить */}
                         <motion.button
                           onClick={handleSaveEdit}
                           whileHover={{ scale: 1.05 }}
@@ -376,7 +425,6 @@ export default function DataTable({
                           Сохранить
                         </motion.button>
 
-                        {/* Отмена */}
                         <motion.button
                           onClick={handleCancelEdit}
                           whileHover={{ scale: 1.05 }}
@@ -401,48 +449,50 @@ export default function DataTable({
 
       <tfoot>
         <tr className="bg-indigo-50/70 border-t">
-          {/* первые 5 колонок под «Итого» */}
-          <td className="px-4 py-3 font-bold" colSpan={5}>
-            Итого
-          </td>
+          {/* пустая под SKU (липкая ≥ sm) */}
+          <td
+            className={[
+              'px-2 sm:px-4 py-2 sm:py-3 bg-indigo-50/70 sm:sticky sm:left-0 sm:z-10 border-r border-indigo-100',
+              SKU_COL_W,
+            ].join(' ')}
+          />
 
-          {/* Выручка, ₽ */}
-          <td className="px-4 py-3 font-bold whitespace-nowrap">
+          {/* Цена — пусто (на xs не суммируем) */}
+          <td className="px-2 sm:px-4 py-2 sm:py-3" />
+
+          {/* скрытые на xs колонки итогов */}
+          <td className="px-4 py-3 hidden sm:table-cell" />
+          <td className="px-4 py-3 hidden sm:table-cell" />
+          <td className="px-4 py-3 hidden sm:table-cell" />
+
+          {/* Выручка (≥ sm) */}
+          <td className="px-4 py-3 hidden sm:table-cell font-semibold">
             {fmtMoney(computed.totals.rev)}
           </td>
-          {/* Комиссия, ₽ */}
-          <td className="px-4 py-3 font-bold whitespace-nowrap">
+
+          {/* Комиссия ₽ (≥ sm) */}
+          <td className="px-4 py-3 hidden sm:table-cell font-semibold">
             {fmtMoney(computed.totals.fee)}
           </td>
-          {/* Прямые затраты, ₽ */}
-          <td className="px-4 py-3 font-bold whitespace-nowrap">
+
+          {/* Прямые (≥ sm) */}
+          <td className="px-4 py-3 hidden sm:table-cell font-semibold">
             {fmtMoney(computed.totals.direct)}
           </td>
 
-          {/* Прибыль, ₽ */}
-          <td
-            className={[
-              'px-4 py-3 font-bold whitespace-nowrap',
-              computed.totals.profit < 0
-                ? 'text-red-700'
-                : computed.totals.profit > 0
-                ? 'text-green-700'
-                : 'text-gray-800',
-            ].join(' ')}
-          >
+          {/* Прибыль (xs видно) */}
+          <td className="px-2 sm:px-4 py-2 sm:py-3 font-semibold">
             {fmtMoney(computed.totals.profit)}
           </td>
 
-          {/* Общая маржа, % */}
+          {/* Маржа (xs видно) */}
           <td
-            className={`px-4 py-3 font-bold whitespace-nowrap ${totalMarginClass}`}
+            className={`px-2 sm:px-4 py-2 sm:py-3 font-semibold  ${totalMarginClass}`}
           >
-            {fmtPct(computed.totalMarginPct)}
-            {'\u00A0'}%
+            {fmtPct(computed.totalMarginPct)} %
           </td>
 
-          {/* Пустая под кнопки/выравнивание */}
-          <td className="px-4 py-3" />
+          <td className="px-4 py-3 hidden sm:table-cell" />
         </tr>
       </tfoot>
     </table>
