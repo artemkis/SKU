@@ -39,6 +39,11 @@ export const SKU_COL_W =
   'min-w-0 w-[30vw] max-w-[50vw] ' +
   'sm:w-[150px] sm:min-w-[150px] sm:max-w-[150px]'
 
+// === версионирование истории маржи ===
+const MARGIN_KEY = 'metrics:marginSeries'
+const MARGIN_VER_KEY = 'metrics:marginSeries:ver'
+const MARGIN_VERSION = 'v2' // ⬅️ увеличивай при изменении формулы/нормализации
+
 // тип строки из БД (fee в рублях/процентах — как у тебя в таблице)
 type DbRow = {
   id: string
@@ -260,6 +265,19 @@ export default function Home() {
   const [busyClear, setBusyClear] = useState(false)
   const [busyTemplate, setBusyTemplate] = useState(false)
 
+  // если версия сменилась — сбрасываем старую историю один раз
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return
+      const savedVer = localStorage.getItem(MARGIN_VER_KEY)
+      if (savedVer !== MARGIN_VERSION) {
+        localStorage.removeItem(MARGIN_KEY)
+        localStorage.setItem(MARGIN_VER_KEY, MARGIN_VERSION)
+        setMarginSeries([]) // визуально очистим сразу
+      }
+    } catch {}
+  }, [])
+
   // toast
   const [toast, setToast] = useState<string | null>(null)
   useEffect(() => {
@@ -286,6 +304,8 @@ export default function Home() {
     }
   }
 
+  const CLEAR_DELAY_MS = 700 // длительность показа спиннера и задержки очистки
+
   // [ADD] История «Общей маржи во времени» (дашборд), хранение в localStorage
   const [marginSeries, setMarginSeries] = useState<MarginPoint[]>(() => {
     try {
@@ -293,7 +313,17 @@ export default function Home() {
         typeof window !== 'undefined'
           ? localStorage.getItem('metrics:marginSeries')
           : null
-      return raw ? (JSON.parse(raw) as MarginPoint[]) : []
+      if (!raw) return []
+      const parsed = JSON.parse(raw) as MarginPoint[]
+      // выкинем NaN/∞ и зажмём в диапазон [-100; 100]
+      return parsed
+        .map((p) => ({
+          ts: Number(p.ts) || Date.now(),
+          margin: Number.isFinite(p.margin)
+            ? Math.max(-100, Math.min(100, Number(p.margin)))
+            : 0,
+        }))
+        .filter((p) => Number.isFinite(p.margin))
     } catch {
       return []
     }
@@ -327,10 +357,10 @@ export default function Home() {
     const edited: Row = {
       id: editingId,
       sku: draftSku.trim() || '',
-      price: toNum(draftPrice),
-      cost: toNum(draftCost),
+      price: Math.max(0, toNum(draftPrice)),
+      cost: Math.max(0, toNum(draftCost)),
       feePct: clamp(toNum(draftFeePct), 0, 100),
-      logistics: toNum(draftLogistics),
+      logistics: Math.max(0, toNum(draftLogistics)),
     }
 
     if (authed) {
@@ -438,13 +468,13 @@ export default function Home() {
       setFeePct('')
       setLogistics('')
       if (!sheetOpen) {
-        setTimeout(() => setSheetOpen(true), 300) // 200–300 мс — оптимально
+        setTimeout(() => setSheetOpen(true), 1000) // 200–300 мс — оптимально
       }
     } catch {
       setToast('Не удалось выполнить действие')
     } finally {
       // гарантируем видимость индикатора хотя бы 200 мс
-      const minShow = 300
+      const minShow = 1000
       // проще и надёжнее: пересчёт от момента старта
       // (если startedAt недоступен выше из-за рефакторинга, оставь sleep(0))
       // но у нас есть startedAt — используем его:
@@ -473,9 +503,16 @@ export default function Home() {
       if (authed) {
         await clearAllRowsAction()
       }
+      // ⏳ держим данные видимыми, пока крутится спиннер
+      await sleep(CLEAR_DELAY_MS)
       setRows([])
       setImportInfo(null)
       handleCancelEdit()
+      // ⬇️ Сброс истории маржи
+      setMarginSeries([])
+      try {
+        localStorage.removeItem(MARGIN_KEY)
+      } catch {}
     } catch {
       setToast('Не удалось выполнить действие')
     }
@@ -486,6 +523,15 @@ export default function Home() {
     const saved = loadRows<Row>()
     if (saved.length) setRows(saved)
   }, [])
+
+  useEffect(() => {
+    if (rows.length === 0) {
+      setMarginSeries([])
+      try {
+        localStorage.removeItem(MARGIN_KEY)
+      } catch {}
+    }
+  }, [rows.length])
 
   useEffect(() => {
     if (!importInfo) return
@@ -560,15 +606,16 @@ export default function Home() {
         : 'text-green-700'
       : 'text-gray-800'
 
-  // [ADD] при изменении общей маржи — пополняем серию для графика (без спама)
+  // [FIXED] нормализуем и ограничиваем маржу перед сохранением в историю
   useEffect(() => {
-    // не пишем точку, если нет выручки
     const rev = computed.totals.rev
     if (!(rev > 0)) return
 
     let margin = computed.totalMarginPct
     if (!Number.isFinite(margin)) return
-    margin = Number(margin.toFixed(2)) // нормализуем
+
+    // 🚀 нормализуем: округляем и ограничиваем диапазон [-100; 100]
+    margin = Math.max(-100, Math.min(100, Number(margin.toFixed(2))))
 
     setMarginSeries((prev) => {
       const now = Date.now()
@@ -581,7 +628,7 @@ export default function Home() {
 
       const next = [...prev.slice(-199), { ts: now, margin }] // не больше 200 точек
       try {
-        localStorage.setItem('metrics:marginSeries', JSON.stringify(next))
+        localStorage.setItem(MARGIN_KEY, JSON.stringify(next))
       } catch {}
       return next
     })
@@ -745,6 +792,16 @@ export default function Home() {
         continue
       }
 
+      // 🚫 Проверяем отрицательные значения
+      if (price < 0 || cost < 0 || logistics < 0) {
+        errors.push(
+          `Строка ${
+            i + 1
+          }: отрицательные значения недопустимы (Цена/Себестоимость/Логистика).`
+        )
+        continue
+      }
+
       parsedRows.push({ id: makeId(), sku, price, cost, feePct, logistics })
     }
 
@@ -843,15 +900,38 @@ export default function Home() {
             </FaqItem>
           </div>
 
-          {/* ===== СРЕДНЯЯ КОЛОНКА (ФОРМА) ===== */}
-          <div className="flex flex-col items-center justify-center  w-full max-w-[700px] mx-auto space-y-4 ">
-            <h1 className="text-2xl font-semibold bg-gradient-to-r from-fuchsia-600 to-sky-500 bg-clip-text text-transparent text-center mb-1">
-              Калькулятор прибыли
-            </h1>
+          {/* ===== СРЕДНЯЯ КОЛОНКА (ФОРМА + Вход/Выход в шапке) ===== */}
+          <div className="flex flex-col items-center justify-center w-full max-w-[700px] mx-auto space-y-3">
+            {/* Шапка формы: заголовок + справа Войти/Выйти */}
+            <div className="flex items-center justify-center gap-5 w-full">
+              <h1 className="text-2xl font-semibold bg-gradient-to-r from-fuchsia-600 to-sky-500 bg-clip-text text-transparent">
+                Калькулятор прибыли
+              </h1>
+
+              {authed ? (
+                <LogoutButton
+                  onAfterSignOut={() => {
+                    setAuthed(false)
+                    setRows(loadRows<Row>())
+                    setImportInfo(null)
+                    setToast('Показаны локальные данные')
+                  }}
+                />
+              ) : (
+                <Link
+                  href="/login"
+                  className="justify-self-end shrink-0 inline-flex items-center gap-2 
+             px-4 py-2 rounded-full text-base font-medium
+             text-white bg-gradient-to-r from-fuchsia-500 to-sky-500
+             shadow-md hover:shadow-lg hover:opacity-90 active:scale-[0.98] transition"
+                >
+                  Войти
+                </Link>
+              )}
+            </div>
 
             <FormCard
               onSubmit={handleSubmit}
-              // [NEW] прокидываем ошибки в форму
               errors={{
                 price: errPrice,
                 cost: errCost,
@@ -886,8 +966,6 @@ export default function Home() {
                   type: 'number',
                   value: feePct,
                   set: setFeePct,
-                  min: 0,
-                  max: 100,
                 },
                 {
                   id: 'logistics',
@@ -904,27 +982,6 @@ export default function Home() {
               onOpenTable={() => setSheetOpen(true)}
               busyAdd={busyAdd}
             />
-          </div>
-
-          {/* ===== ПРАВАЯ КОЛОНКА (ВОЙТИ / ВЫЙТИ) ===== */}
-          <div className="flex justify-center items-start pt-2">
-            {authed ? (
-              <LogoutButton
-                onAfterSignOut={() => {
-                  setAuthed(false)
-                  setRows(loadRows<Row>())
-                  setImportInfo(null)
-                  setToast('Показаны локальные данные')
-                }}
-              />
-            ) : (
-              <Link
-                href="/login"
-                className="px-4 py-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-sky-500 text-white hover:opacity-90 transition"
-              >
-                Войти
-              </Link>
-            )}
           </div>
         </div>
 
@@ -971,13 +1028,19 @@ export default function Home() {
                     >
                       <div className="flex items-center gap-2 whitespace-nowrap">
                         {/* === Очистить всё === */}
-                        {rows.length > 0 && (
+                        {(rows.length > 0 || busyClear) && (
                           <button
                             onClick={() =>
-                              withBusy(setBusyClear, handleClearAll, 200)
+                              withBusy(
+                                setBusyClear,
+                                handleClearAll,
+                                CLEAR_DELAY_MS
+                              )
                             }
-                            disabled={busyClear}
-                            className="btn-gradient disabled:opacity-60 disabled:cursor-not-allowed"
+                            disabled={busyClear || rows.length === 0}
+                            className={`btn-tonal btn-rose ${
+                              busyClear ? 'btn-disabled' : ''
+                            }`}
                           >
                             {busyClear ? (
                               <>
@@ -1038,7 +1101,7 @@ export default function Home() {
                                 }
                                 if (!sheetOpen) setSheetOpen(true)
                               },
-                              200
+                              500
                             )
                             inputEl.value = ''
                           }}
@@ -1050,7 +1113,9 @@ export default function Home() {
                             document.getElementById('csv-file')?.click()
                           }
                           disabled={busyImport}
-                          className={`btn-gradient disabled:opacity-60 disabled:cursor-not-allowed`}
+                          className={`btn-tonal btn-emerald ${
+                            busyImport ? 'btn-disabled' : ''
+                          }`}
                         >
                           {busyImport ? (
                             <>
@@ -1121,11 +1186,13 @@ export default function Home() {
                                 downloadCSV(tpl, 'sku-template.csv')
                                 setToast('Шаблон выгружен')
                               },
-                              200
+                              500
                             )
                           }
                           disabled={busyTemplate}
-                          className="btn-gradient disabled:opacity-60 disabled:cursor-not-allowed"
+                          className={`btn-tonal btn-slate ${
+                            busyTemplate ? 'btn-disabled' : ''
+                          }`}
                         >
                           {busyTemplate ? (
                             <>
@@ -1173,11 +1240,13 @@ export default function Home() {
                                     .slice(0, 19)
                                   downloadCSV(csv, `sku-profit-${stamp}.csv`)
                                 },
-                                200
+                                500
                               )
                             }
                             disabled={busyExport}
-                            className="btn-gradient disabled:opacity-60 disabled:cursor-not-allowed"
+                            className={`btn-tonal btn-indigo ${
+                              busyExport ? 'btn-disabled' : ''
+                            }`}
                           >
                             {busyExport ? (
                               <>
@@ -1210,11 +1279,13 @@ export default function Home() {
                                     addUnits
                                   )
                                 },
-                                200
+                                500
                               )
                             }
                             disabled={busyExport}
-                            className="btn-gradient disabled:opacity-60 disabled:cursor-not-allowed"
+                            className={`btn-tonal btn-indigo ${
+                              busyExport ? 'btn-disabled' : ''
+                            }`}
                           >
                             {busyExport ? (
                               <>
@@ -1247,10 +1318,7 @@ export default function Home() {
                       setSheetOpen(false)
                       handleCancelEdit()
                     }}
-                    className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-xl 
-             bg-gradient-to-r from-fuchsia-500 to-sky-500 
-             text-white shadow-md hover:shadow-lg hover:opacity-90 
-             transition active:scale-[0.98]"
+                    className="btn-tonal btn-slate"
                     aria-label="Закрыть"
                   >
                     <XIcon className="h-4 w-4 sm:mr-0" />

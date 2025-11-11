@@ -18,7 +18,10 @@ export function LogoutButton({
   };
 
   return (
-    <button onClick={handle} className="rounded border px-3 py-1 text-sm">
+    <button onClick={handle} className="justify-self-end shrink-0 inline-flex items-center gap-2 
+             px-4 py-2 rounded-full text-base font-medium
+             text-white bg-gradient-to-r from-fuchsia-500 to-sky-500
+             shadow-md hover:shadow-lg hover:opacity-90 active:scale-[0.98] transition">
       Выйти
     </button>
   );

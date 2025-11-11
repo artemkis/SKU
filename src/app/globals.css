@@ -29,4 +29,21 @@
          active:scale-[0.98] transition;
 }
 
+/* базовый тихий стиль */
+.btn-tonal {
+  @apply inline-flex items-center gap-2 px-3 py-2 rounded-xl
+         bg-white/90 border shadow-sm
+         hover:bg-white transition;
+}
+
+/* цветовые варианты (спокойные тона) */
+.btn-emerald { @apply border-emerald-200 text-emerald-700 hover:bg-emerald-50; }
+.btn-indigo  { @apply border-indigo-200  text-indigo-700  hover:bg-indigo-50;  }
+.btn-slate   { @apply border-gray-300    text-gray-700    hover:bg-gray-50;   }
+.btn-rose    { @apply border-rose-200    text-rose-700    hover:bg-rose-50;   }
+
+/* состояние disabled */
+.btn-disabled { @apply opacity-60 cursor-not-allowed; }
+
+
 

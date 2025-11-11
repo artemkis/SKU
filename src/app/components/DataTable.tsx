@@ -5,6 +5,14 @@ import { fmtPct, fmtMoney } from '../../lib/helpers'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Pencil, Trash2, Check, X } from 'lucide-react'
 
+const preventMinusKey: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+  if (e.key === '-' || e.code === 'Minus' || e.key === 'Subtract') {
+    e.preventDefault();
+  }
+};
+
+const stripLeadingMinus = (s: string) => s.replace(/^-+/, '');
+
 /* ================== типы пропсов ================== */
 
 type HeaderCol = {
@@ -153,7 +161,7 @@ export default function DataTable({
                     <span className="inline-flex items-center whitespace-nowrap gap-2 align-middle">
                       <span>Товар</span>
                       {col.tooltip && (
-                        <Tooltip content={<TipContent col={col} />}> 
+                        <Tooltip content={<TipContent col={col} />}>
                           <span className="hidden sm:inline-flex shrink-0 h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-gray-600 bg-white hover:bg-gray-50">
                             i
                           </span>
@@ -171,15 +179,21 @@ export default function DataTable({
                 className={[
                   thClass(col),
                   XS_W[col.key] ?? '',
-                  col.key !== 'sku' && CORE_KEYS.has(col.key) ? 'text-left' : '',
+                  col.key !== 'sku' && CORE_KEYS.has(col.key)
+                    ? 'text-left'
+                    : '',
                 ].join(' ')}
               >
                 <span className="inline-flex items-center whitespace-nowrap gap-2 align-middle">
                   {/* короткий лейбл на xs, полный на ≥sm */}
                   <span className="sm:hidden">
-                    {col.key === 'price' ? 'Цена' :
-                     col.key === 'profit' ? 'Приб.' :
-                     col.key === 'margin' ? 'Маржа' : col.label}
+                    {col.key === 'price'
+                      ? 'Цена'
+                      : col.key === 'profit'
+                      ? 'Приб.'
+                      : col.key === 'margin'
+                      ? 'Маржа'
+                      : col.label}
                   </span>
                   <span className="hidden sm:inline">{col.label}</span>
 
@@ -263,19 +277,18 @@ export default function DataTable({
                   </td>
 
                   {/* Цена, ₽ (видна на xs) */}
-                  <td
-                    className={[
-                      tdClass('price'),
-                      XS_W.price,
-                    ].join(' ')}
-                  >
+                  <td className={[tdClass('price'), XS_W.price].join(' ')}>
                     {isEditing ? (
                       <input
                         type="number"
                         inputMode="decimal"
+                        min={0}
                         step="0.01"
-                        value={draftPrice}
-                        onChange={(e) => setDraftPrice(e.target.value)}
+                        value={draftPrice} // или нужный стейт
+                        onKeyDown={preventMinusKey}
+                        onChange={(e) =>
+                          setDraftPrice(stripLeadingMinus(e.target.value))
+                        }
                         className="w-32 rounded-lg border border-gray-300 bg-white px-2 py-1 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300"
                       />
                     ) : (
@@ -289,9 +302,11 @@ export default function DataTable({
                       <input
                         type="number"
                         inputMode="decimal"
+                        min={0}
                         step="0.01"
                         value={draftCost}
-                        onChange={(e) => setDraftCost(e.target.value)}
+                        onKeyDown={preventMinusKey}
+                        onChange={(e) => setDraftCost(stripLeadingMinus(e.target.value))}
                         className="w-32 rounded-lg border border-gray-300 bg-white px-2 py-1 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300"
                       />
                     ) : (
@@ -307,10 +322,10 @@ export default function DataTable({
                           type="number"
                           inputMode="decimal"
                           step="0.01"
-                          min={0}
-                          max={100}
+                          
                           value={draftFeePct}
-                          onChange={(e) => setDraftFeePct(e.target.value)}
+                          onKeyDown={preventMinusKey}
+                        onChange={(e) => setDraftFeePct(stripLeadingMinus(e.target.value))}
                           className="w-20 rounded-lg border border-gray-300 bg-white px-2 py-1 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300"
                         />
                         <span>%</span>
@@ -329,9 +344,11 @@ export default function DataTable({
                       <input
                         type="number"
                         inputMode="decimal"
+                        min={0}
                         step="0.01"
                         value={draftLogistics}
-                        onChange={(e) => setDraftLogistics(e.target.value)}
+                        onKeyDown={preventMinusKey}
+                        onChange={(e) => setDraftLogistics(stripLeadingMinus(e.target.value))}
                         className="w-32 rounded-lg border border-gray-300 bg-white px-2 py-1 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300"
                       />
                     ) : (
@@ -365,7 +382,7 @@ export default function DataTable({
                       XS_W.margin,
                     ].join(' ')}
                   >
-                    {fmtPct(r.marginPct)}{' '}%
+                    {fmtPct(r.marginPct)} %
                   </td>
 
                   {/* Действия — только ≥ sm */}

@@ -31,7 +31,7 @@ export default function FormCard({
   busyAdd: boolean
 }) {
   return (
-    <form
+    <form noValidate
       onSubmit={onSubmit}
       autoComplete="off"
       className="relative w-full max-w-md rounded-2xl border border-white/40 bg-white/60 backdrop-blur-md shadow-xl p-6 ring-1 ring-black/5 space-y-4"
