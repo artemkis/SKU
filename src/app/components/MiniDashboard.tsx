@@ -83,16 +83,17 @@ const MiniDashboard: React.FC<Props> = ({
     <div className="px-4 pb-2 overflow-x-hidden">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* === Прибыль по SKU === */}
-        <div
-          className="flex-1 min-w-[300px] max-w-[600px] bg-white/90 border border-gray-200 rounded-xl shadow p-4"
-        >
+        <div className="flex-1 min-w-[300px] max-w-[600px] bg-white/90 border border-gray-200 rounded-xl shadow p-4">
           <h3 className="text-sm font-semibold mb-1">Прибыль по товарам</h3>
           <p className="text-xs text-gray-500 mb-2">
             Сколько приносит каждая позиция
           </p>
 
           {/* контейнер графика: изоляция и обрезка, чтобы тултип не вызывал полосы */}
-          <div className="h-[220px] overflow-hidden" style={{ contain: 'layout paint' }}>
+          <div
+            className="h-[220px] overflow-hidden"
+            style={{ contain: 'layout paint' }}
+          >
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dataSku}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -121,11 +122,11 @@ const MiniDashboard: React.FC<Props> = ({
         </div>
 
         {/* === Общая маржа во времени === */}
-        <div
-          className="flex-1 min-w-[300px] max-w-[600px] bg-white/90 border border-gray-200 rounded-xl shadow p-4"
-        >
+        <div className="flex-1 min-w-[300px] max-w-[600px] bg-white/90 border border-gray-200 rounded-xl shadow p-4">
           <div className="flex items-center justify-between mb-1">
-            <h3 className="text-sm font-semibold">История маржи (динамика во времени)</h3>
+            <h3 className="text-sm font-semibold">
+              История маржи (динамика во времени)
+            </h3>
             {onClearMargin && dataMargin.length > 0 && (
               <button
                 onClick={onClearMargin}
@@ -136,11 +137,15 @@ const MiniDashboard: React.FC<Props> = ({
             )}
           </div>
           <p className="text-xs text-gray-500 mb-2">
-            Отслеживайте, как менялась средняя маржа при добавлении или редактировании товаров
+            Отслеживайте, как менялась средняя маржа при добавлении или
+            редактировании товаров
           </p>
 
           {/* контейнер графика: изоляция и обрезка */}
-          <div className="h-[220px] overflow-hidden" style={{ contain: 'layout paint' }}>
+          <div
+            className="h-[220px] overflow-hidden"
+            style={{ contain: 'layout paint' }}
+          >
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={dataMargin}
@@ -148,7 +153,11 @@ const MiniDashboard: React.FC<Props> = ({
               >
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="time" />
-                <YAxis tickFormatter={pctTick} />
+                <YAxis
+                  tickFormatter={pctTick}
+                  domain={[-100, 100]} // 👈 ограничиваем диапазон маржи от -100% до 100%
+                  allowDataOverflow={false}
+                />
                 <RTooltip
                   formatter={(value: number, name) => [
                     `${fmtPct(Number(value))}%`,

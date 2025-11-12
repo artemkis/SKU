@@ -23,11 +23,11 @@ import {
   fetchRowsAction,
   upsertRowAction,
   deleteRowAction,
+  clearAllRowsAction,
 } from '../app/actions/rows'
 import { supabase } from '../lib/supabase/client'
 import Link from 'next/link'
 import { LogoutButton } from './components/LogoutButton'
-import { clearAllRowsAction } from '../app/actions/rows' // рядом с остальными экшенами
 
 // [ADD] XLSX экспорт
 import * as XLSX from 'xlsx'
@@ -130,7 +130,7 @@ const headerColumns: Array<{
     width: 'w-[12%]',
     tooltip: {
       text: 'Сумма комиссии в рублях.',
-      formula: 'Комиссия ₽ = Выручка ₽ × (Комиссия % / 100 %)',
+      formula: 'Комиссия ₽ = Цена ₽ × (Комиссия % / 100 %)',
     },
   },
   {
@@ -265,18 +265,9 @@ export default function Home() {
   const [busyClear, setBusyClear] = useState(false)
   const [busyTemplate, setBusyTemplate] = useState(false)
 
-  // если версия сменилась — сбрасываем старую историю один раз
-  useEffect(() => {
-    try {
-      if (typeof window === 'undefined') return
-      const savedVer = localStorage.getItem(MARGIN_VER_KEY)
-      if (savedVer !== MARGIN_VERSION) {
-        localStorage.removeItem(MARGIN_KEY)
-        localStorage.setItem(MARGIN_VER_KEY, MARGIN_VERSION)
-        setMarginSeries([]) // визуально очистим сразу
-      }
-    } catch {}
-  }, [])
+  const [replaceBySku, setReplaceBySku] = useState(true)
+
+  
 
   // toast
   const [toast, setToast] = useState<string | null>(null)
@@ -328,6 +319,19 @@ export default function Home() {
       return []
     }
   })
+
+    // если версия сменилась — сбрасываем старую историю один раз
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return
+      const savedVer = localStorage.getItem(MARGIN_VER_KEY)
+      if (savedVer !== MARGIN_VERSION) {
+        localStorage.removeItem(MARGIN_KEY)
+        localStorage.setItem(MARGIN_VER_KEY, MARGIN_VERSION)
+        setMarginSeries([]) // визуально очистим сразу
+      }
+    } catch {}
+  }, [])
 
   useEffect(() => {
     if (editingId && !rows.some((r) => r.id === editingId)) {
@@ -456,11 +460,28 @@ export default function Home() {
         logistics: l,
       }
       if (authed) {
+        // 🔁 форма + авторизация: перезаписываем существующую строку с тем же SKU
+        if (replaceBySku) {
+          const { rows: dbRows } = await fetchRowsAction()
+          const existingUi = (dbRows as DbRow[]).map(dbToUi)
+          const hit = existingUi.find(r => skuKey(r.sku) === skuKey(newRow.sku))
+          if (hit) newRow.id = hit.id // upsert перезапишет существующую запись
+        }
         await upsertRowAction(uiToDb(newRow))
-        const { rows: dbRows } = await fetchRowsAction()
-        setRows((dbRows as DbRow[]).map(dbToUi))
+        const { rows: dbRows2 } = await fetchRowsAction()
+        setRows((dbRows2 as DbRow[]).map(dbToUi))
       } else {
-        setRows((prev) => [newRow, ...prev])
+        // 🔁 форма + локально: заменяем в массиве, если есть такой же SKU
+        setRows(prev => {
+          if (!replaceBySku) return [newRow, ...prev]
+          const k = skuKey(newRow.sku)
+          const idx = prev.findIndex(r => skuKey(r.sku) === k)
+          if (idx === -1) return [newRow, ...prev]
+          const next = [...prev]
+          // сохраняем старый id, чтобы ссылки/редактирование не ломались
+          next[idx] = { ...newRow, id: prev[idx].id }
+          return next
+        })
       }
       setSku('')
       setPrice('')
@@ -518,12 +539,6 @@ export default function Home() {
     }
   }
 
-  // localStorage
-  useEffect(() => {
-    const saved = loadRows<Row>()
-    if (saved.length) setRows(saved)
-  }, [])
-
   useEffect(() => {
     if (rows.length === 0) {
       setMarginSeries([])
@@ -577,7 +592,8 @@ export default function Home() {
       const fee = unitFee(r.price, r.feePct, 0)
       const direct = r.cost + r.logistics
       const profit = rev - fee - direct
-      const marginPct = rev > 0 ? (profit / rev) * 100 : 0
+      const rawMarginPct = rev > 0 ? (profit / rev) * 100 : 0
+      const marginPct = clamp(rawMarginPct, -100, 100)
       return { ...r, rev, fee, direct, profit, marginPct }
     })
 
@@ -592,8 +608,9 @@ export default function Home() {
       { rev: 0, fee: 0, direct: 0, profit: 0 }
     )
 
-    const totalMarginPct =
+    const rawTotalMarginPct =
       totals.rev > 0 ? (totals.profit / totals.rev) * 100 : 0
+    const totalMarginPct = clamp(rawTotalMarginPct, -100, 100)
     return { rows: withMetrics, totals, totalMarginPct }
   }, [rows])
 
@@ -604,6 +621,13 @@ export default function Home() {
       ? computed.totalMarginPct < 20
         ? 'text-yellow-700'
         : 'text-green-700'
+      : 'text-gray-800'
+
+  const totalsProfitClass =
+    computed.totals.profit < 0
+      ? 'text-red-600'
+      : computed.totals.profit > 0
+      ? 'text-green-600'
       : 'text-gray-800'
 
   // [FIXED] нормализуем и ограничиваем маржу перед сохранением в историю
@@ -657,6 +681,25 @@ export default function Home() {
     ]
     counts.sort((a, b) => b[1] - a[1])
     return counts[0][1] > 0 ? counts[0][0] : ';'
+  }
+
+    // нормализуем SKU в «ключ»: убираем BOM/zero-width, приводим к NFKC, трим и в нижний регистр
+  function skuKey(s: string) {
+    return (s ?? '')
+      .replace(/[\u200B-\u200D\uFEFF]/g, '') // zero-width & BOM
+      .normalize('NFKC')                     // экзотические символы → канонизируем
+      .trim()
+      .toLowerCase()
+  }
+
+  function mergeBySku(existing: Row[], incoming: Row[], replace = true) {
+    const map = new Map<string, Row>()
+    for (const r of existing) map.set(skuKey(r.sku), r)
+    for (const r of incoming) {
+      const key = skuKey(r.sku)
+      if (replace || !map.has(key)) map.set(key, r)
+    }
+    return Array.from(map.values())
   }
 
   // маппим текст заголовка к каноническому ключу
@@ -769,7 +812,8 @@ export default function Home() {
       const feePctRaw = cols[idx.feePct]
       const logisticsRaw = cols[idx.logistics]
 
-      const sku = skuRaw?.trim()
+      // очищаем от невидимых символов, но сохраняем регистр/вид для отображения
+      const sku = (skuRaw ?? '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim()
       const price = parseNum(priceRaw)
       const cost = parseNum(costRaw)
       const feePct = clamp(parseNum(feePctRaw), 0, 100)
@@ -1011,8 +1055,6 @@ export default function Home() {
               </div>
 
               {/* тулбар */}
-              {/* тулбар */}
-              {/* тулбар */}
               <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-white/95 backdrop-blur border-b border-gray-200/60">
                 <div className="text-sm text-gray-600">
                   Всего позиций:&nbsp;
@@ -1086,7 +1128,34 @@ export default function Home() {
                                   setToast('Не удалось выполнить действие')
                                   return
                                 }
-                                setRows((prev) => [...parsed, ...prev])
+                                // 🔁 импорт: с защитой от дублей по SKU
+                                if (authed) {
+                                  // при авторизации: перезаписываем по SKU на уровне БД
+                                  if (replaceBySku) {
+                                    const { rows: dbRows } = await fetchRowsAction()
+                                    const existingUi = (dbRows as DbRow[]).map(dbToUi)
+                                    const bySku = new Map(existingUi.map(r => [skuKey(r.sku), r]))
+                                    for (const r of parsed) {
+                                      const hit = bySku.get(skuKey(r.sku))
+                                      if (hit) r.id = hit.id // сохраняем id → upsert перезапишет
+                                    }
+                                  }
+                                  for (const r of parsed) {
+                                    await upsertRowAction(uiToDb(r))
+                                  }
+                                  const { rows: fresh } =
+                                    await fetchRowsAction()
+                                  setRows((fresh as DbRow[]).map(dbToUi))
+                                } else {
+                                  // локально:
+                                  //  • если включено — заменяем по SKU (без дублей)
+                                  //  • если выключено — ДОбавляем как есть (дубликаты разрешены)
+                                  setRows(prev =>
+                                    replaceBySku
+                                      ? mergeBySku(prev, parsed, true)
+                                      : [...parsed, ...prev]
+                                  )
+                                }
                                 if (errors.length > 0) {
                                   setImportInfo({
                                     type: 'warn',
@@ -1098,6 +1167,11 @@ export default function Home() {
                                     type: 'success',
                                     msg: `Импортировано: ${parsed.length}.`,
                                   })
+                                }
+                                if (replaceBySku) {
+                                  setToast(
+                                    'Импорт завершён: дубликаты заменены по SKU'
+                                  )
                                 }
                                 if (!sheetOpen) setSheetOpen(true)
                               },
@@ -1209,17 +1283,32 @@ export default function Home() {
                           )}
                         </button>
 
-                        {/* === чекбокс "с ед. изм." === */}
+                        {/* === чекбокс "с ед. изм.", 'заменять по SKU' */}
                         {rows.length > 0 && (
-                          <label className="flex-none flex items-center gap-2 text-sm text-gray-700 ml-1">
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4"
-                              checked={addUnits}
-                              onChange={(e) => setAddUnits(e.target.checked)}
-                            />
-                            <span className="hidden sm:inline">с ед. изм.</span>
-                          </label>
+                          <>
+                            <label className="flex-none flex items-center gap-2 text-sm text-gray-700 ml-1">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4"
+                                checked={addUnits}
+                                onChange={(e) => setAddUnits(e.target.checked)}
+                              />
+                              <span className="hidden sm:inline">
+                                с ед. изм.
+                              </span>
+                            </label>
+                            <label className="flex items-center gap-2 text-sm text-gray-700 ml-2">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4"
+                                checked={replaceBySku}
+                                onChange={(e) =>
+                                  setReplaceBySku(e.target.checked)
+                                }
+                              />
+                              заменять по SKU
+                            </label>
+                          </>
                         )}
 
                         {/* === Экспорт CSV === */}
@@ -1450,6 +1539,7 @@ export default function Home() {
                       handleCancelEdit={handleCancelEdit}
                       handleRemove={handleRemove}
                       totalMarginClass={totalMarginClass}
+                      totalsProfitClass={totalsProfitClass}
                     />
                   </div>
                 )}

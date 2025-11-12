@@ -7,11 +7,11 @@ import { Pencil, Trash2, Check, X } from 'lucide-react'
 
 const preventMinusKey: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
   if (e.key === '-' || e.code === 'Minus' || e.key === 'Subtract') {
-    e.preventDefault();
+    e.preventDefault()
   }
-};
+}
 
-const stripLeadingMinus = (s: string) => s.replace(/^-+/, '');
+const stripLeadingMinus = (s: string) => s.replace(/^-+/, '')
 
 /* ================== типы пропсов ================== */
 
@@ -66,6 +66,7 @@ type DataTableProps = {
   handleRemove: (id: string) => void
 
   totalMarginClass: string
+  totalsProfitClass: string
 }
 
 /* ================== компонент ================== */
@@ -90,6 +91,7 @@ export default function DataTable({
   handleCancelEdit,
   handleRemove,
   totalMarginClass,
+  totalsProfitClass
 }: DataTableProps) {
   const TipContent = ({ col }: { col: HeaderCol }) => {
     const f = col.tooltip?.formula
@@ -241,6 +243,7 @@ export default function DataTable({
                     ? 'text-yellow-600'
                     : 'text-green-600'
                   : 'text-gray-800'
+              
 
               return (
                 <motion.tr
@@ -306,7 +309,9 @@ export default function DataTable({
                         step="0.01"
                         value={draftCost}
                         onKeyDown={preventMinusKey}
-                        onChange={(e) => setDraftCost(stripLeadingMinus(e.target.value))}
+                        onChange={(e) =>
+                          setDraftCost(stripLeadingMinus(e.target.value))
+                        }
                         className="w-32 rounded-lg border border-gray-300 bg-white px-2 py-1 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300"
                       />
                     ) : (
@@ -322,10 +327,11 @@ export default function DataTable({
                           type="number"
                           inputMode="decimal"
                           step="0.01"
-                          
                           value={draftFeePct}
                           onKeyDown={preventMinusKey}
-                        onChange={(e) => setDraftFeePct(stripLeadingMinus(e.target.value))}
+                          onChange={(e) =>
+                            setDraftFeePct(stripLeadingMinus(e.target.value))
+                          }
                           className="w-20 rounded-lg border border-gray-300 bg-white px-2 py-1 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300"
                         />
                         <span>%</span>
@@ -348,7 +354,9 @@ export default function DataTable({
                         step="0.01"
                         value={draftLogistics}
                         onKeyDown={preventMinusKey}
-                        onChange={(e) => setDraftLogistics(stripLeadingMinus(e.target.value))}
+                        onChange={(e) =>
+                          setDraftLogistics(stripLeadingMinus(e.target.value))
+                        }
                         className="w-32 rounded-lg border border-gray-300 bg-white px-2 py-1 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-300"
                       />
                     ) : (
@@ -498,7 +506,7 @@ export default function DataTable({
           </td>
 
           {/* Прибыль (xs видно) */}
-          <td className="px-2 sm:px-4 py-2 sm:py-3 font-semibold">
+          <td className={`px-2 sm:px-4 py-2 sm:py-3 font-semibold ${totalsProfitClass}`}>
             {fmtMoney(computed.totals.profit)}
           </td>
 
