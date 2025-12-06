@@ -1281,7 +1281,7 @@ export default function Home() {
                                 await sleep(0)
                                 const tpl =
                                   '\uFEFFТовар;Цена;Себестоимость;Комиссия %;Логистика\n' +
-                                  'пример;100;50;10;20\n'
+                                  'пример - магний;100;50;10;20\n'
                                 downloadCSV(tpl, 'sku-template.csv')
                                 setToast('Шаблон выгружен')
                               },
