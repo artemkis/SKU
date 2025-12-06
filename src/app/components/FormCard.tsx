@@ -41,7 +41,7 @@ export default function FormCard({
           Ввод данных товара
         </h1>
         <p className="text-center text-gray-500 text-sm italic">
-          Введите данные, чтобы рассчитать прибыль и маржу
+          Введите параметры товара (цена, себестоимость, комиссия, логистика), и калькулятор покажет прибыль и маржу на Wildberries и Ozon.
         </p>
       </div>
 
