@@ -64,14 +64,24 @@ const dbToUi = (r: DbRow): Row => ({
   logistics: r.logistics,
 })
 
-const uiToDb = (r: Row) => ({
-  id: r.id,
-  sku: r.sku,
-  price: r.price,
-  cost: r.cost,
-  fee: r.feePct, // ← feePct -> fee
-  logistics: r.logistics,
-})
+const uiToDb = (r: Row) => {
+  // Проверяем, похож ли id на UUID (формат xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+  const isUuid =
+    typeof r.id === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(r.id)
+
+  const base = {
+    sku: r.sku,
+    price: r.price,
+    cost: r.cost,
+    fee: r.feePct,      // feePct -> fee
+    logistics: r.logistics,
+  }
+
+  // Если id из БД (UUID) — отправляем его, чтобы обновить строку.
+  // Если это локальный makeId() — вообще не шлём id, БД сгенерит сама.
+  return isUuid ? { id: r.id, ...base } : base
+}
 
 const headerColumns: Array<{
   key: string
@@ -267,8 +277,6 @@ export default function Home() {
 
   const [replaceBySku, setReplaceBySku] = useState(true)
 
-  
-
   // toast
   const [toast, setToast] = useState<string | null>(null)
   useEffect(() => {
@@ -320,7 +328,7 @@ export default function Home() {
     }
   })
 
-    // если версия сменилась — сбрасываем старую историю один раз
+  // если версия сменилась — сбрасываем старую историю один раз
   useEffect(() => {
     try {
       if (typeof window === 'undefined') return
@@ -464,7 +472,9 @@ export default function Home() {
         if (replaceBySku) {
           const { rows: dbRows } = await fetchRowsAction()
           const existingUi = (dbRows as DbRow[]).map(dbToUi)
-          const hit = existingUi.find(r => skuKey(r.sku) === skuKey(newRow.sku))
+          const hit = existingUi.find(
+            (r) => skuKey(r.sku) === skuKey(newRow.sku)
+          )
           if (hit) newRow.id = hit.id // upsert перезапишет существующую запись
         }
         await upsertRowAction(uiToDb(newRow))
@@ -472,10 +482,10 @@ export default function Home() {
         setRows((dbRows2 as DbRow[]).map(dbToUi))
       } else {
         // 🔁 форма + локально: заменяем в массиве, если есть такой же SKU
-        setRows(prev => {
+        setRows((prev) => {
           if (!replaceBySku) return [newRow, ...prev]
           const k = skuKey(newRow.sku)
-          const idx = prev.findIndex(r => skuKey(r.sku) === k)
+          const idx = prev.findIndex((r) => skuKey(r.sku) === k)
           if (idx === -1) return [newRow, ...prev]
           const next = [...prev]
           // сохраняем старый id, чтобы ссылки/редактирование не ломались
@@ -573,8 +583,10 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    if (!authed) saveRows(rows)
-  }, [rows, authed])
+  if (!authed && rows.length > 0) {
+    saveRows(rows)
+  }
+}, [rows, authed])
 
   useEffect(() => {
     const {
@@ -683,11 +695,11 @@ export default function Home() {
     return counts[0][1] > 0 ? counts[0][0] : ';'
   }
 
-    // нормализуем SKU в «ключ»: убираем BOM/zero-width, приводим к NFKC, трим и в нижний регистр
+  // нормализуем SKU в «ключ»: убираем BOM/zero-width, приводим к NFKC, трим и в нижний регистр
   function skuKey(s: string) {
     return (s ?? '')
       .replace(/[\u200B-\u200D\uFEFF]/g, '') // zero-width & BOM
-      .normalize('NFKC')                     // экзотические символы → канонизируем
+      .normalize('NFKC') // экзотические символы → канонизируем
       .trim()
       .toLowerCase()
   }
@@ -915,9 +927,16 @@ export default function Home() {
 
   return (
     <>
-      <main className="flex min-h-screen items-start justify-center py-10 px-4 relative z-10">
+      <main className="min-h-screen py-10 px-4 relative z-10">
         {/* ТРИ КОЛОНКИ: FAQ | Форма | Войти/Выйти */}
-        <div className="mx-auto max-w-[1200px] grid gap-10 items-start grid-cols-1 xl:grid-cols-[minmax(360px,0.9fr),minmax(560px,1.1fr),auto]">
+        <div
+          className="
+    mx-auto max-w-[1200px]
+    grid gap-10 items-star
+    grid-cols-1
+    xl:grid-cols-[minmax(360px,0.9fr),minmax(560px,1.1fr)]
+  "
+        >
           {/* ===== ЛЕВАЯ КОЛОНКА (FAQ) ===== */}
           <div className="hidden lg:flex flex-col space-y-3 text-gray-700">
             <h2 className="text-2xl font-semibold bg-gradient-to-r from-fuchsia-600 to-sky-500 bg-clip-text text-transparent mb-2 text-center">
@@ -955,11 +974,12 @@ export default function Home() {
               {authed ? (
                 <LogoutButton
                   onAfterSignOut={() => {
-                    setAuthed(false)
-                    setRows(loadRows<Row>())
-                    setImportInfo(null)
-                    setToast('Показаны локальные данные')
-                  }}
+  const local = loadRows<Row>() // 1. читаем локальные данные
+  setAuthed(false)
+  setRows(local)                // 2. восстанавливаем их
+  setImportInfo(null)
+  setToast('Показаны локальные данные')
+}}
                 />
               ) : (
                 <Link
@@ -1132,9 +1152,14 @@ export default function Home() {
                                 if (authed) {
                                   // при авторизации: перезаписываем по SKU на уровне БД
                                   if (replaceBySku) {
-                                    const { rows: dbRows } = await fetchRowsAction()
-                                    const existingUi = (dbRows as DbRow[]).map(dbToUi)
-                                    const bySku = new Map(existingUi.map(r => [skuKey(r.sku), r]))
+                                    const { rows: dbRows } =
+                                      await fetchRowsAction()
+                                    const existingUi = (dbRows as DbRow[]).map(
+                                      dbToUi
+                                    )
+                                    const bySku = new Map(
+                                      existingUi.map((r) => [skuKey(r.sku), r])
+                                    )
                                     for (const r of parsed) {
                                       const hit = bySku.get(skuKey(r.sku))
                                       if (hit) r.id = hit.id // сохраняем id → upsert перезапишет
@@ -1150,7 +1175,7 @@ export default function Home() {
                                   // локально:
                                   //  • если включено — заменяем по SKU (без дублей)
                                   //  • если выключено — ДОбавляем как есть (дубликаты разрешены)
-                                  setRows(prev =>
+                                  setRows((prev) =>
                                     replaceBySku
                                       ? mergeBySku(prev, parsed, true)
                                       : [...parsed, ...prev]
@@ -1547,6 +1572,20 @@ export default function Home() {
             </div>
           </div>
         </section>
+        <footer className="py-6 text-center text-sm text-gray-500">
+          Нужна помощь?{' '}
+          <a
+            className="underline"
+            href="https://t.me/artekis88"
+            target="_blank"
+          >
+            Написать в Telegram
+          </a>{' '}
+          |{' '}
+          <a className="underline" href="/privacy">
+            Политика конфиденциальности
+          </a>
+        </footer>
       </main>
 
       {/* toast */}

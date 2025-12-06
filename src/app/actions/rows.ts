@@ -30,6 +30,7 @@ export async function fetchRowsAction() {
   const { data, error } = await supabase
     .from('rows')
     .select('*')
+    .eq('user_id', user.id) // ← ОБЯЗАТЕЛЬНО!
     .order('created_at', { ascending: false });
 
   if (error) throw new Error(error.message);

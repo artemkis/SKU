@@ -1,8 +1,14 @@
 import './globals.css'
 
 export const metadata = {
-  title: 'SKU Profit Calculator',
-  description: 'MVP калькулятор прибыли по SKU',
+  title: 'Калькулятор маржи для маркетплейсов',
+  description: 'Импорт CSV, расчёт прибыли/маржи, история маржи, экспорт XLSX.',
+  openGraph: {
+    title: 'Калькулятор маржи',
+    description: 'Импорт CSV, расчёт прибыли/маржи, история маржи, экспорт XLSX.',
+    images: ['/og.png'], // положим файл в public
+  },
+  icons: { icon: '/favicon.ico' },
 }
 
 export default function RootLayout({
