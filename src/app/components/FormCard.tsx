@@ -61,6 +61,7 @@ export default function FormCard({
               id={field.id}
               type={field.type}
               value={field.value}
+              autoFocus={field.id === 'price'}
               min={field.min}
               max={field.max}
               onChange={(e) => field.set(e.target.value)}
