@@ -77,7 +77,7 @@ export default function LandingPage() {
               </div>
 
               <div className="text-xs text-gray-500">
-                Подходит для оценки товара перед закупкой
+                Для быстрой оценки товара перед закупкой
               </div>
             </motion.div>
           </div>
@@ -115,7 +115,7 @@ export default function LandingPage() {
 
             <div className="flex items-start gap-2 text-xs text-gray-500">
               <AlertTriangle size={14} className="mt-0.5" />
-              Цифры используются для сравнения и принятия решений
+              Для сравнения и принятия решений
             </div>
           </motion.div>
 
